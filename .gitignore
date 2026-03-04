@@ -1,0 +1,158 @@
+# =============================================================
+# .gitignore — Smart Agriculture Project
+# Excludes secrets, build artifacts, IDE files, and OS clutter
+# =============================================================
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+
+# Virtual environments
+venv/
+env/
+.env/
+.venv/
+ENV/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+
+# ── Environment & Secrets ─────────────────────────────────────
+# NEVER commit API keys, passwords, or credentials
+.env
+.env.local
+.env.production
+.env.staging
+secrets.py
+credentials.py
+
+# ── MicroPython / ESP32 ───────────────────────────────────────
+# Compiled MicroPython bytecode
+*.mpy
+
+# Thonny IDE files
+.thonny/
+thonny.ini
+
+# ── FastAPI / Backend ─────────────────────────────────────────
+# Database files (will use MongoDB — but just in case)
+*.db
+*.sqlite3
+*.sqlite
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Uploaded files / temp
+uploads/
+temp/
+tmp/
+
+# ── Machine Learning ──────────────────────────────────────────
+# Trained model files (large — store in releases or DVC later)
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.onnx
+*.pt
+*.pth
+models/saved/
+models/trained/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*.ipynb
+
+# ML experiment tracking
+mlruns/
+wandb/
+.dvc/
+
+# ── Node.js / Frontend ────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log
+.pnpm-debug.log
+dist/
+.next/
+.nuxt/
+build/
+
+# ── IDEs & Editors ────────────────────────────────────────────
+# VS Code
+.vscode/
+!.vscode/extensions.json    # keep recommended extensions list
+
+# JetBrains (PyCharm, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
+
+# ── Operating System ──────────────────────────────────────────
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+
+# ── MongoDB ───────────────────────────────────────────────────
+data/db/
+mongo-data/
+*.bson
+
+# ── Docker (for future cloud deployment) ──────────────────────
+.docker/
+docker-compose.override.yml
+
+# ── Miscellaneous ─────────────────────────────────────────────
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Backup files
+*.bak
+*.backup
+*.orig
