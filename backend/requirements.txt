@@ -6,22 +6,28 @@
 
 # ── Web Framework ─────────────────────────────────────────────
 fastapi==0.115.5
-uvicorn[standard]==0.32.1      # ASGI server to run FastAPI
+uvicorn[standard]==0.32.1
 
 # ── MQTT Client ───────────────────────────────────────────────
-paho-mqtt==2.0.0               # MQTT subscriber for FastAPI
+paho-mqtt==2.0.0
 
 # ── Data Validation ───────────────────────────────────────────
-pydantic==2.10.3               # Data models & validation (built into FastAPI)
-pydantic-settings==2.6.1       # .env file loading into settings
+pydantic==2.10.3
+pydantic-settings==2.6.1
 
 # ── Database ──────────────────────────────────────────────────
-motor==3.6.0                   # Async MongoDB driver (for Phase 3)
+motor==3.6.0
 pymongo==4.9.2                 # Must be <4.10 — required by motor 3.6.0
 
-# ── Utilities ─────────────────────────────────────────────────
-python-dotenv==1.0.1           # Load .env file
-python-dateutil==2.9.0         # Date/time utilities
+# ── HTTP Client (Weather API) ─────────────────────────────────
+httpx==0.27.0                  # Async HTTP client for OpenWeatherMap API
 
-# ── Development ───────────────────────────────────────────────
-httpx==0.27.0                  # For testing API endpoints
+# ── Machine Learning ──────────────────────────────────────────
+scikit-learn==1.5.2            # Random Forest, preprocessing, metrics
+numpy==2.1.3                   # Numerical computing
+pandas==2.2.3                  # Data manipulation and CSV loading
+joblib==1.4.2                  # Model serialization (.joblib files)
+
+# ── Utilities ─────────────────────────────────────────────────
+python-dotenv==1.0.1
+python-dateutil==2.9.0

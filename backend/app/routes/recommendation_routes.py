@@ -1,0 +1,364 @@
+# =============================================================
+# app/routes/recommendation_routes.py — ML Recommendation API
+#
+# Endpoints:
+#   GET  /api/recommend/full          → all 3 recommendations at once
+#                                       (uses live sensor + weather data)
+#   POST /api/recommend/crop          → crop recommendation (manual input)
+#   POST /api/recommend/fertilizer    → fertilizer recommendation
+#   POST /api/recommend/irrigation    → irrigation recommendation
+#   GET  /api/recommend/status        → ML models load status
+# =============================================================
+
+import logging
+from fastapi import APIRouter, HTTPException
+from typing import Optional
+
+from app.services.ml_service      import ml_service
+from app.services.weather_service import weather_service
+from app.services                 import mqtt_service as mqtt_module
+from app.models.recommendation import (
+    CropRecommendationRequest,
+    CropRecommendationResponse,
+    FertilizerRecommendationRequest,
+    FertilizerRecommendationResponse,
+    IrrigationRecommendationRequest,
+    IrrigationRecommendationResponse,
+    FullRecommendationResponse,
+    TopPrediction,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/recommend", tags=["ML Recommendations"])
+
+
+# ── Helpers ───────────────────────────────────────────────────
+
+def _require_ml():
+    """Raises 503 if ML models are not loaded yet."""
+    if not ml_service.is_ready():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "ML models not loaded. "
+                "Run: python ml/train_models.py — then restart the server."
+            )
+        )
+
+
+def _format_crop(result) -> CropRecommendationResponse:
+    return CropRecommendationResponse(
+        crop           = result.crop,
+        confidence     = result.confidence,
+        confidence_pct = f"{result.confidence * 100:.1f}%",
+        top_3_crops    = [
+            TopPrediction(label=c, probability=p) for c, p in result.top_3
+        ],
+        advice       = result.advice,
+        input_used   = result.input_features,
+        weather_used = result.input_features.get("rainfall_mm") is not None,
+    )
+
+
+def _format_fertilizer(result) -> FertilizerRecommendationResponse:
+    return FertilizerRecommendationResponse(
+        fertilizer         = result.fertilizer,
+        confidence         = result.confidence,
+        confidence_pct     = f"{result.confidence * 100:.1f}%",
+        top_3_fertilizers  = [
+            TopPrediction(label=f, probability=p) for f, p in result.top_3
+        ],
+        advice       = result.advice,
+        npk_status   = result.npk_status,
+        input_used   = result.input_features,
+        weather_used = True,
+    )
+
+
+def _format_irrigation(result) -> IrrigationRecommendationResponse:
+    return IrrigationRecommendationResponse(
+        action          = result.action,
+        confidence      = result.confidence,
+        confidence_pct  = f"{result.confidence * 100:.1f}%",
+        advice          = result.advice,
+        water_amount_mm = result.water_amount_mm,
+        urgency         = result.urgency,
+        input_used      = result.input_features,
+        weather_used    = result.input_features.get("rainfall_mm", 0) > 0,
+    )
+
+
+# ── Routes ────────────────────────────────────────────────────
+
+@router.get(
+    "/full",
+    response_model=FullRecommendationResponse,
+    summary="Run all 3 ML recommendations using live sensor + weather data"
+)
+async def get_full_recommendation():
+    """
+    The primary endpoint for the farmer dashboard.
+
+    Automatically pulls:
+      - Latest sensor readings (temperature, humidity, soil moisture, pH)
+      - Current weather data (temperature, humidity, rainfall)
+
+    Then runs all three ML models and returns combined recommendations.
+
+    Note: NPK values default to moderate levels if no NPK sensor is
+    connected yet. Add NPK sensor in Phase 5 hardware upgrade.
+    """
+    _require_ml()
+
+    warnings     = []
+    sensor_dict  = None
+    weather_dict = None
+
+    # ── 1. Get latest sensor reading ──────────────────────────
+    latest = mqtt_module.latest_reading
+    if latest is None:
+        warnings.append(
+            "No live sensor data available. "
+            "Using default values for sensor fields."
+        )
+
+    # ── 2. Get weather data ───────────────────────────────────
+    weather = await weather_service.get_current_weather()
+    if weather is None:
+        warnings.append(
+            "Weather API not configured or unavailable. "
+            "Using default rainfall value. "
+            "Add WEATHER_API_KEY to .env for better recommendations."
+        )
+
+    # ── 3. Build unified feature values ──────────────────────
+    # Sensor values — fall back to safe defaults if no reading
+    temperature_c     = (latest.temperature_c    or 25.0) if latest else 25.0
+    humidity_pct      = (latest.humidity_pct     or 60.0) if latest else 60.0
+    soil_moisture_pct = (latest.soil_moisture_pct or 50.0) if latest else 50.0
+    ph_value          = (latest.ph_value         or 6.5)  if latest else 6.5
+
+    # Weather values — fall back to safe defaults
+    weather_temp     = weather.temperature_c     if weather else temperature_c
+    weather_humidity = weather.humidity_pct      if weather else humidity_pct
+    rainfall_mm      = weather.rainfall_monthly_mm if weather else 100.0
+
+    # NPK defaults (used until NPK sensor is added)
+    # These are typical moderate fertility values
+    nitrogen   = 60.0
+    phosphorus = 40.0
+    potassium  = 40.0
+
+    if latest:
+        sensor_dict = {
+            "temperature_c":     temperature_c,
+            "humidity_pct":      humidity_pct,
+            "soil_moisture_pct": soil_moisture_pct,
+            "ph_value":          ph_value,
+        }
+
+    if weather:
+        weather_dict = weather.to_dict()
+
+    # ── 4. Run all three ML models ────────────────────────────
+
+    # Crop recommendation — uses weather temp/humidity/rainfall
+    crop_result = ml_service.predict_crop(
+        nitrogen    = nitrogen,
+        phosphorus  = phosphorus,
+        potassium   = potassium,
+        temperature = weather_temp,
+        humidity    = weather_humidity,
+        ph          = ph_value,
+        rainfall    = rainfall_mm,
+    )
+
+    # Fertilizer recommendation — uses sensor moisture + weather
+    fert_result = ml_service.predict_fertilizer(
+        temperature = weather_temp,
+        humidity    = weather_humidity,
+        moisture    = soil_moisture_pct,
+        soil_type   = "Loamy",      # default — user can override via POST endpoint
+        crop_type   = "Wheat",      # default — user can override via POST endpoint
+        nitrogen    = nitrogen,
+        potassium   = potassium,
+        phosphorus  = phosphorus,
+    )
+
+    # Irrigation — uses real sensor moisture + weather rainfall
+    irrig_result = ml_service.predict_irrigation(
+        soil_moisture = soil_moisture_pct,
+        temperature   = temperature_c,
+        humidity      = humidity_pct,
+        ph            = ph_value,
+        rainfall_mm   = rainfall_mm,
+    )
+
+    return FullRecommendationResponse(
+        sensor_data_used  = sensor_dict,
+        weather_data_used = weather_dict,
+        crop              = _format_crop(crop_result)       if crop_result  else None,
+        fertilizer        = _format_fertilizer(fert_result) if fert_result  else None,
+        irrigation        = _format_irrigation(irrig_result) if irrig_result else None,
+        ml_ready          = ml_service.is_ready(),
+        weather_available = weather is not None,
+        warnings          = warnings,
+    )
+
+
+@router.post(
+    "/crop",
+    response_model=CropRecommendationResponse,
+    summary="Get crop recommendation with custom NPK input"
+)
+async def recommend_crop(request: CropRecommendationRequest):
+    """
+    Recommends the best crop based on soil NPK, pH, and weather.
+    Temperature, humidity, and rainfall auto-filled from live data
+    if not provided in the request body.
+    """
+    _require_ml()
+
+    # Auto-fill from sensors/weather if not provided
+    weather = await weather_service.get_current_weather()
+    latest  = mqtt_module.latest_reading
+
+    temperature = request.temperature
+    humidity    = request.humidity
+    rainfall    = request.rainfall
+
+    if temperature is None:
+        temperature = (
+            weather.temperature_c if weather
+            else (latest.temperature_c if latest else 25.0)
+        )
+    if humidity is None:
+        humidity = (
+            weather.humidity_pct if weather
+            else (latest.humidity_pct if latest else 60.0)
+        )
+    if rainfall is None:
+        rainfall = weather.rainfall_monthly_mm if weather else 100.0
+
+    result = ml_service.predict_crop(
+        nitrogen    = request.nitrogen,
+        phosphorus  = request.phosphorus,
+        potassium   = request.potassium,
+        temperature = temperature,
+        humidity    = humidity,
+        ph          = request.ph,
+        rainfall    = rainfall,
+    )
+
+    if result is None:
+        raise HTTPException(status_code=500, detail="Crop prediction failed.")
+
+    return _format_crop(result)
+
+
+@router.post(
+    "/fertilizer",
+    response_model=FertilizerRecommendationResponse,
+    summary="Get fertilizer recommendation"
+)
+async def recommend_fertilizer(request: FertilizerRecommendationRequest):
+    """
+    Recommends the best fertilizer based on soil NPK and crop type.
+    Temperature, humidity, moisture auto-filled from live sensors if not provided.
+    """
+    _require_ml()
+
+    weather = await weather_service.get_current_weather()
+    latest  = mqtt_module.latest_reading
+
+    temperature = request.temperature or (
+        weather.temperature_c if weather
+        else (latest.temperature_c if latest else 25.0)
+    )
+    humidity = request.humidity or (
+        weather.humidity_pct if weather
+        else (latest.humidity_pct if latest else 60.0)
+    )
+    moisture = request.moisture or (
+        latest.soil_moisture_pct if latest else 50.0
+    )
+
+    result = ml_service.predict_fertilizer(
+        temperature = temperature,
+        humidity    = humidity,
+        moisture    = moisture,
+        soil_type   = request.soil_type,
+        crop_type   = request.crop_type,
+        nitrogen    = request.nitrogen,
+        potassium   = request.potassium,
+        phosphorus  = request.phosphorus,
+    )
+
+    if result is None:
+        raise HTTPException(status_code=500, detail="Fertilizer prediction failed.")
+
+    return _format_fertilizer(result)
+
+
+@router.post(
+    "/irrigation",
+    response_model=IrrigationRecommendationResponse,
+    summary="Get irrigation recommendation"
+)
+async def recommend_irrigation(request: IrrigationRecommendationRequest):
+    """
+    Recommends irrigation action based on soil moisture and weather.
+    All fields auto-filled from live sensor + weather data if not provided.
+    """
+    _require_ml()
+
+    weather = await weather_service.get_current_weather()
+    latest  = mqtt_module.latest_reading
+
+    soil_moisture = request.soil_moisture or (
+        latest.soil_moisture_pct if latest else 50.0
+    )
+    temperature = request.temperature or (
+        latest.temperature_c if latest else 25.0
+    )
+    humidity = request.humidity or (
+        latest.humidity_pct if latest else 60.0
+    )
+    ph = request.ph or (
+        latest.ph_value if latest else 6.5
+    )
+    rainfall_mm = request.rainfall_mm or (
+        weather.rainfall_monthly_mm if weather else 50.0
+    )
+
+    result = ml_service.predict_irrigation(
+        soil_moisture = soil_moisture,
+        temperature   = temperature,
+        humidity      = humidity,
+        ph            = ph,
+        rainfall_mm   = rainfall_mm,
+    )
+
+    if result is None:
+        raise HTTPException(status_code=500, detail="Irrigation prediction failed.")
+
+    return _format_irrigation(result)
+
+
+@router.get(
+    "/status",
+    summary="Check ML models load status"
+)
+async def get_ml_status():
+    """Returns which ML models are loaded and ready for inference."""
+    return {
+        "ml_ready":          ml_service.is_ready(),
+        "crop_model":        ml_service._crop_model   is not None,
+        "fertilizer_model":  ml_service._fert_model   is not None,
+        "irrigation_model":  ml_service._irrig_model  is not None,
+        "weather_configured": weather_service.is_configured(),
+        "message": (
+            "All systems ready." if ml_service.is_ready()
+            else "Run: python ml/train_models.py — then restart."
+        )
+    }

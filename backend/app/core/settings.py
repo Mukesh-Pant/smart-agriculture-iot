@@ -1,18 +1,11 @@
 # =============================================================
 # app/core/settings.py — Centralised Configuration
-# Loads all environment variables from .env using pydantic-settings.
-# Every other module imports from here — never from os.environ directly.
 # =============================================================
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """
-    All application settings loaded from the .env file.
-    Pydantic validates types automatically — if a required value
-    is missing or wrong type, the app fails loudly on startup.
-    """
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -35,14 +28,26 @@ class Settings(BaseSettings):
     MQTT_CLIENT_ID:         str = "fastapi_backend_01"
 
     # ── MongoDB ───────────────────────────────────────────────
-    MONGO_URI:                  str = "mongodb://localhost:27017"
-    MONGO_DB_NAME:              str = "smart_agriculture"
-    MONGO_COLLECTION_READINGS:  str = "sensor_readings"
-    MONGO_COLLECTION_DAILY:     str = "daily_summaries"
+    MONGO_URI:                 str = "mongodb://localhost:27017"
+    MONGO_DB_NAME:             str = "smart_agriculture"
+    MONGO_COLLECTION_READINGS: str = "sensor_readings"
+    MONGO_COLLECTION_DAILY:    str = "daily_summaries"
 
-    # ── Weather API ───────────────────────────────────────────
-    WEATHER_API_KEY: str = ""
-    WEATHER_CITY:    str = "Mahendranagar"
+    # ── Weather API (OpenWeatherMap) ──────────────────────────
+    WEATHER_API_KEY:      str   = ""
+    WEATHER_CITY:         str   = "Mahendranagar"
+    WEATHER_COUNTRY_CODE: str   = "NP"          # Nepal
+    WEATHER_CACHE_TTL:    int   = 600            # seconds — re-fetch every 10 min
+
+    # ── Machine Learning ──────────────────────────────────────
+    ML_MODELS_DIR:        str   = "ml/saved_models"
+    ML_DATASETS_DIR:      str   = "ml/datasets"
+    ML_CROP_MODEL_FILE:   str   = "crop_recommendation_model.joblib"
+    ML_FERT_MODEL_FILE:   str   = "fertilizer_recommendation_model.joblib"
+    ML_IRRIG_MODEL_FILE:  str   = "irrigation_recommendation_model.joblib"
+    ML_ENCODER_FILE:      str   = "label_encoders.joblib"
+    ML_SCALER_FILE:       str   = "feature_scaler.joblib"
+    ML_MIN_CONFIDENCE:    float = 0.45           # minimum probability to show recommendation
 
 
 # Single instance imported everywhere
