@@ -59,7 +59,7 @@ temp/
 tmp/
 
 # ── Machine Learning ──────────────────────────────────────────
-# Trained model files (large — store in releases or DVC later)
+# Trained model files — large binary files, regenerate with train_models.py
 *.pkl
 *.pickle
 *.joblib
@@ -70,6 +70,12 @@ tmp/
 *.pth
 models/saved/
 models/trained/
+
+# ML saved models folder (regenerate by running: python ml/train_models.py)
+# backend/ml/saved_models/
+
+# ML datasets — large CSV files, download from Kaggle (see SETUP_PHASE4.md)
+# backend/ml/datasets/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -82,13 +88,23 @@ wandb/
 
 # ── Node.js / Frontend ────────────────────────────────────────
 node_modules/
+frontend/node_modules/
 npm-debug.log*
 yarn-error.log
 .pnpm-debug.log
+yarn.lock
+package-lock.json
+
+# Vite build output
+frontend/dist/
 dist/
 .next/
 .nuxt/
 build/
+
+# Vite cache
+frontend/.vite/
+.vite/
 
 # ── IDEs & Editors ────────────────────────────────────────────
 # VS Code
