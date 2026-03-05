@@ -1,14 +1,8 @@
 # =============================================================
 # app/main.py — FastAPI Application Entry Point
-#
-# This file:
-#   - Creates the FastAPI app instance
-#   - Manages startup/shutdown lifecycle (MQTT start/stop)
-#   - Registers all API routers
-#   - Configures CORS for future frontend access
-#   - Serves a root health-check endpoint
 # =============================================================
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -17,9 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.settings import settings
 from app.routes.sensor_routes import router as sensor_router
-from app.services.mqtt_service import mqtt_service
+from app.routes.analytics_routes import router as analytics_router
+from app.services.mqtt_service import mqtt_service, set_event_loop
+from app.database.mongodb import connect_to_mongo, close_mongo_connection
 
-# ── Logging Configuration ─────────────────────────────────────
+# ── Logging ───────────────────────────────────────────────────
 logging.basicConfig(
     level   = logging.INFO if settings.APP_DEBUG else logging.WARNING,
     format  = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -28,68 +24,68 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ── Lifespan: Startup & Shutdown ──────────────────────────────
+# ── Lifespan ──────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    FastAPI lifespan context manager.
-    Code before `yield` runs on startup.
-    Code after `yield` runs on shutdown.
-    This replaces the deprecated @app.on_event("startup") pattern.
-    """
     # ── STARTUP ───────────────────────────────────────────────
     logger.info("=" * 55)
     logger.info("  Smart Agriculture Backend Starting Up")
     logger.info(f"  Version : {settings.APP_VERSION}")
-    logger.info(f"  Debug   : {settings.APP_DEBUG}")
     logger.info("=" * 55)
 
+    # 1. Connect to MongoDB
+    await connect_to_mongo()
+
+    # 2. Register the running event loop with the MQTT service
+    #    so it can schedule async DB saves from its thread
+    loop = asyncio.get_running_loop()
+    set_event_loop(loop)
+
+    # 3. Start MQTT subscriber
     logger.info("[APP] Starting MQTT subscriber service...")
     mqtt_service.start()
-    logger.info("[APP] MQTT service running — waiting for ESP32 data.")
-    logger.info(f"[APP] API docs available at: http://localhost:{settings.APP_PORT}/docs")
+
+    logger.info(f"[APP] API docs → http://localhost:{settings.APP_PORT}/docs")
 
     yield  # ← Application runs here
 
     # ── SHUTDOWN ──────────────────────────────────────────────
-    logger.info("[APP] Shutting down — stopping MQTT service...")
+    logger.info("[APP] Shutting down...")
     mqtt_service.stop()
+    await close_mongo_connection()
     logger.info("[APP] Shutdown complete.")
 
 
-# ── FastAPI App Instance ──────────────────────────────────────
+# ── App Instance ──────────────────────────────────────────────
 app = FastAPI(
     title       = settings.APP_TITLE,
     version     = settings.APP_VERSION,
     description = (
         "Backend API for the IoT-Based Smart Agriculture Monitoring System. "
-        "Receives real-time sensor data from ESP32 via MQTT and exposes "
-        "REST endpoints for the farmer dashboard."
+        "Receives real-time sensor data from ESP32 via MQTT, persists to "
+        "MongoDB, and exposes REST endpoints for the farmer dashboard."
     ),
-    lifespan    = lifespan,
-    docs_url    = "/docs",      # Swagger UI
-    redoc_url   = "/redoc",     # ReDoc UI
+    lifespan  = lifespan,
+    docs_url  = "/docs",
+    redoc_url = "/redoc",
 )
 
-
-# ── CORS Middleware ───────────────────────────────────────────
-# Allows the React frontend (running on different port) to call this API.
+# ── CORS ──────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins  = ["*"],     # Restrict to specific domain in production
-    allow_methods  = ["*"],
-    allow_headers  = ["*"],
+    allow_origins = ["*"],
+    allow_methods = ["*"],
+    allow_headers = ["*"],
 )
 
-
-# ── Register Routers ──────────────────────────────────────────
+# ── Routers ───────────────────────────────────────────────────
 app.include_router(sensor_router)
+app.include_router(analytics_router)
 
 
-# ── Root Endpoint ─────────────────────────────────────────────
+# ── Health Endpoints ──────────────────────────────────────────
 @app.get("/", tags=["Health"])
 async def root():
-    """Root health-check endpoint — confirms the server is running."""
     return {
         "message": "Smart Agriculture API is running",
         "version": settings.APP_VERSION,
@@ -100,5 +96,9 @@ async def root():
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Lightweight health check for monitoring."""
-    return {"status": "healthy"}
+    from app.database.mongodb import is_connected
+    return {
+        "status":   "healthy",
+        "mongodb":  "connected" if is_connected() else "disconnected",
+        "mqtt":     "running"
+    }
