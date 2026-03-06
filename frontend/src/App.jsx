@@ -1,822 +1,827 @@
-import { useState, useCallback, useEffect } from "react";
-import {
-  LineChart, Line, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, RadialBarChart, RadialBar, PolarAngleAxis
-} from "recharts";
-import {
-  getLatestReading, getSensorHistory, getCurrentWeather,
-  getFullRecommendation, getWeeklySummary, getSystemStatus,
-  postCropRecommendation, postFertilizerRecommendation
-} from "./services/api";
+// ─────────────────────────────────────────────────────────────
+// AgriSense Dashboard — Phase 6 Enhanced UI
+//
+// Font:   system-ui / -apple-system (exact Claude.ai stack)
+//         + Geist Mono for numbers
+// Colour: #090e09 near-black base, #16c181 luminous accent
+//         Warm stone neutrals, semantic rose/blue/amber
+// Motion: animated counters, page fade, card lift, shimmer
+// Extra:  dot-grid CSS texture, top-edge glow on hover
+// ─────────────────────────────────────────────────────────────
+
+import { useState, useCallback, useEffect, useRef } from "react";
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { getLatestReading, getSensorHistory, getCurrentWeather,
+  getFullRecommendation, getWeeklySummary, postCropRecommendation }
+  from "./services/api";
 import { usePolling, useFetch } from "./hooks/useApi";
 
-// ─────────────────────────────────────────────────────────────
-// DESIGN TOKENS
-// ─────────────────────────────────────────────────────────────
-const C = {
-  bg:        "#0d1a12",
-  surface:   "#132019",
-  card:      "#1a2d20",
-  border:    "#2a4030",
-  green:     "#4ade80",
-  greenDim:  "#166534",
-  amber:     "#fbbf24",
-  amberDim:  "#78350f",
-  teal:      "#2dd4bf",
-  rose:      "#fb7185",
-  muted:     "#6b8c75",
-  text:      "#e2f0e8",
-  textDim:   "#8fac97",
+// ── Tokens ────────────────────────────────────────────────────
+const T = {
+  bg:"#090e09", surface:"#0f1610", card:"#141f15",
+  cardHover:"#192519", overlay:"#1e2e1f",
+  border:"#243325", borderLight:"#2e4030",
+  accent:"#16c181", accentDim:"#0d7a50",
+  accentSubtle:"#0a2318",
+  blue:"#60a5fa",  blueSubtle:"#0f1f3a",
+  amber:"#fbbf24", amberSubtle:"#1e1505",
+  rose:"#fb7185",  roseSubtle:"#200b10",
+  teal:"#2dd4bf",  tealSubtle:"#081e1c",
+  violet:"#c084fc",
+  text:"#eef4ee", textSub:"#9db89e",
+  textMuted:"#6a8a6b", textDim:"#3d5a3e",
 };
 
-// ─────────────────────────────────────────────────────────────
-// UTILITY HELPERS
-// ─────────────────────────────────────────────────────────────
-const fmt  = (v, d = 1) => v == null ? "—" : Number(v).toFixed(d);
-const pct  = (v)        => v == null ? "—" : `${Number(v).toFixed(1)}%`;
-const ago  = (iso)      => {
-  if (!iso) return "—";
-  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
-  if (s < 60)  return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+const F = {
+  body:"system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+  display:"system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+  mono:"'GeistMono','JetBrains Mono','Fira Code','Consolas',monospace",
+};
+
+// ── Helpers ───────────────────────────────────────────────────
+const fmt   = (v,d=1) => v==null ? "—" : Number(v).toFixed(d);
+const clamp = (v,lo,hi) => Math.min(hi,Math.max(lo,v??lo));
+const ago   = (iso) => {
+  if(!iso) return "—";
+  const s = Math.floor((Date.now()-new Date(iso))/1000);
+  if(s<60) return `${s}s ago`;
+  if(s<3600) return `${Math.floor(s/60)}m ago`;
   return `${Math.floor(s/3600)}h ago`;
 };
-const timeLabel = (iso) => {
-  if (!iso) return "";
+const hhmm = (iso) => {
+  if(!iso) return "";
   const d = new Date(iso);
-  return `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}`;
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 };
 
-// ─────────────────────────────────────────────────────────────
-// REUSABLE COMPONENTS
-// ─────────────────────────────────────────────────────────────
-
-function LiveDot() {
-  return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
-      <span style={{
-        width:8, height:8, borderRadius:"50%",
-        background: C.green,
-        boxShadow: `0 0 0 0 ${C.green}`,
-        animation: "pulse 2s infinite",
-        display:"inline-block"
-      }}/>
-    </span>
-  );
+// ── Animated counter ──────────────────────────────────────────
+function useCountUp(target, dur=800){
+  const [val,setVal] = useState(target);
+  const prev = useRef(target);
+  useEffect(()=>{
+    if(target==null||isNaN(target)){setVal(target);return;}
+    const start=prev.current??0, diff=target-start;
+    if(Math.abs(diff)<0.01) return;
+    const t0=performance.now();
+    const frame=(now)=>{
+      const p=Math.min(1,(now-t0)/dur);
+      setVal(start+diff*(1-Math.pow(1-p,3)));
+      if(p<1) requestAnimationFrame(frame);
+      else prev.current=target;
+    };
+    requestAnimationFrame(frame);
+  },[target,dur]);
+  return val;
 }
 
-function SectionTitle({ icon, title, sub }) {
-  return (
-    <div style={{ marginBottom:20 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-        <span style={{ fontSize:20 }}>{icon}</span>
-        <h2 style={{
-          fontFamily:"'Playfair Display', serif",
-          fontSize:22, fontWeight:700,
-          color: C.text, margin:0, letterSpacing:"0.02em"
-        }}>{title}</h2>
-      </div>
-      {sub && <p style={{ margin:"4px 0 0 30px", color:C.muted, fontSize:13 }}>{sub}</p>}
-    </div>
-  );
-}
+// ── Primitives ────────────────────────────────────────────────
 
-function Card({ children, style = {}, glow }) {
-  return (
-    <div style={{
-      background: C.card,
-      border: `1px solid ${glow ? C.green : C.border}`,
-      borderRadius: 16,
-      padding: "20px 22px",
-      boxShadow: glow ? `0 0 24px ${C.greenDim}` : "0 2px 12px rgba(0,0,0,0.4)",
-      transition: "box-shadow 0.3s",
-      ...style
-    }}>
+function Card({children,style={},accent,onClick,glow,padding="20px 22px"}){
+  const [hov,setHov]=useState(false);
+  const gc=accent||T.accent;
+  return(
+    <div onClick={onClick}
+      onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{
+        background:hov?T.cardHover:T.card,
+        border:`1px solid ${hov?gc+"55":glow?gc+"40":T.border}`,
+        borderRadius:16, padding,
+        transition:"background .2s,border-color .2s,box-shadow .25s,transform .18s",
+        boxShadow:hov
+          ?`0 12px 40px rgba(0,0,0,.5),0 0 0 1px ${gc}15,inset 0 1px 0 ${gc}10`
+          :glow?`0 0 24px ${gc}18`:"0 2px 8px rgba(0,0,0,.35)",
+        transform:hov&&onClick?"translateY(-2px)":"none",
+        cursor:onClick?"pointer":"default",
+        position:"relative", overflow:"hidden", ...style
+      }}>
+      {hov&&<div style={{position:"absolute",top:0,left:0,right:0,height:1,
+        background:`linear-gradient(90deg,transparent,${gc}60,transparent)`,
+        pointerEvents:"none"}}/>}
       {children}
     </div>
   );
 }
 
-function StatPill({ label, value, unit, color = C.green, icon }) {
-  return (
-    <div style={{
-      display:"flex", flexDirection:"column", gap:4,
-      padding:"14px 18px", borderRadius:12,
-      background: C.surface, border:`1px solid ${C.border}`,
-    }}>
-      <span style={{ fontSize:12, color:C.muted, textTransform:"uppercase", letterSpacing:"0.08em" }}>
-        {icon} {label}
-      </span>
-      <span style={{ fontFamily:"'Playfair Display', serif", fontSize:28, fontWeight:700, color, lineHeight:1 }}>
-        {value}
-        <span style={{ fontSize:13, fontWeight:400, color:C.muted, marginLeft:4 }}>{unit}</span>
-      </span>
-    </div>
-  );
-}
-
-function Badge({ text, color = C.green }) {
-  return (
-    <span style={{
-      padding:"3px 10px", borderRadius:20,
-      background: `${color}22`, border:`1px solid ${color}55`,
-      color, fontSize:12, fontWeight:600, letterSpacing:"0.04em"
-    }}>{text}</span>
-  );
-}
-
-function ErrorBanner({ msg }) {
-  return (
-    <div style={{
-      background:"#2d0f0f", border:"1px solid #7f1d1d",
-      borderRadius:10, padding:"10px 16px",
-      color:"#fca5a5", fontSize:13, marginBottom:10
-    }}>⚠️ {msg}</div>
-  );
-}
-
-function Spinner() {
-  return (
-    <div style={{ textAlign:"center", padding:40, color:C.muted }}>
-      <div style={{ fontSize:24, animation:"spin 1s linear infinite", display:"inline-block" }}>⟳</div>
-      <div style={{ marginTop:8, fontSize:13 }}>Loading…</div>
-    </div>
-  );
-}
-
-function ConfidenceBar({ value, color = C.green }) {
-  const pctVal = Math.round((value || 0) * 100);
-  return (
-    <div>
-      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-        <span style={{ fontSize:12, color:C.muted }}>Confidence</span>
-        <span style={{ fontSize:13, color, fontWeight:700 }}>{pctVal}%</span>
+function Metric({label,value,unit,color=T.accent,icon,sub,decimals=1}){
+  const [hov,setHov]=useState(false);
+  const num=parseFloat(value);
+  const counted=useCountUp(isNaN(num)?null:num);
+  const display=isNaN(num)?(value??"—"):counted!=null?Number(counted).toFixed(decimals):"—";
+  return(
+    <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{padding:"17px 18px",borderRadius:14,
+        background:hov?T.cardHover:T.card,
+        border:`1px solid ${hov?color+"55":T.border}`,
+        transition:"all .2s",
+        boxShadow:hov?`0 8px 28px rgba(0,0,0,.4),0 0 0 1px ${color}18`:"none",
+        position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",left:0,top:12,bottom:12,width:3,
+        borderRadius:"0 2px 2px 0",
+        background:`linear-gradient(180deg,${color}cc,${color}44)`,
+        opacity:hov?1:.5,transition:"opacity .2s"}}/>
+      <div style={{fontSize:11,color:T.textMuted,textTransform:"uppercase",
+        letterSpacing:".07em",fontWeight:600,marginBottom:10,paddingLeft:6}}>
+        {icon&&<span style={{marginRight:5}}>{icon}</span>}{label}</div>
+      <div style={{display:"flex",alignItems:"baseline",gap:5,paddingLeft:6}}>
+        <span style={{fontFamily:F.mono,fontSize:32,fontWeight:600,color,
+          lineHeight:1,letterSpacing:"-.02em"}}>{display}</span>
+        {unit&&<span style={{fontSize:13,color:T.textMuted,fontWeight:400}}>{unit}</span>}
       </div>
-      <div style={{ height:6, borderRadius:3, background:C.surface, overflow:"hidden" }}>
-        <div style={{
-          height:"100%", borderRadius:3,
-          width:`${pctVal}%`,
-          background:`linear-gradient(90deg, ${color}88, ${color})`,
-          transition:"width 0.8s ease"
-        }}/>
-      </div>
+      {sub&&<div style={{marginTop:7,fontSize:12,color:T.textMuted,paddingLeft:6}}>{sub}</div>}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// SENSOR GAUGES (Radial)
-// ─────────────────────────────────────────────────────────────
-function RadialGauge({ value, max, label, unit, color }) {
-  const pctValue = Math.min(100, Math.round(((value || 0) / max) * 100));
-  const data = [{ value: pctValue, fill: color }];
-  return (
-    <div style={{ textAlign:"center" }}>
-      <div style={{ position:"relative", width:110, height:110, margin:"0 auto" }}>
-        <RadialBarChart
-          width={110} height={110}
-          cx={55} cy={55}
-          innerRadius={36} outerRadius={50}
-          barSize={10} data={data}
-          startAngle={225} endAngle={-45}
-        >
-          <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-          <RadialBar background={{ fill:"#1a2d20" }} dataKey="value" cornerRadius={5} />
-        </RadialBarChart>
-        <div style={{
-          position:"absolute", top:"50%", left:"50%",
-          transform:"translate(-50%,-50%)",
-          textAlign:"center"
-        }}>
-          <div style={{
-            fontFamily:"'Playfair Display', serif",
-            fontSize:16, fontWeight:700, color, lineHeight:1
-          }}>{fmt(value, 1)}</div>
-          <div style={{ fontSize:9, color:C.muted, marginTop:2 }}>{unit}</div>
+function ProgressBar({value,max=100,color=T.accent,height=5}){
+  const pct=clamp((value/max)*100,0,100);
+  return(
+    <div style={{height,borderRadius:height,background:`${color}18`,overflow:"hidden"}}>
+      <div style={{height:"100%",borderRadius:height,width:`${pct}%`,
+        background:`linear-gradient(90deg,${color}88,${color})`,
+        transition:"width .9s cubic-bezier(.4,0,.2,1)"}}/>
+    </div>
+  );
+}
+
+function ConfRow({label,value,color}){
+  const pct=Math.round((value||0)*100);
+  return(
+    <div style={{marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+        {label&&<span style={{fontSize:12,color:T.textSub}}>{label}</span>}
+        <span style={{fontSize:13,fontWeight:700,color,fontFamily:F.mono,marginLeft:"auto"}}>{pct}%</span>
+      </div>
+      <ProgressBar value={pct} color={color}/>
+    </div>
+  );
+}
+
+function Badge({text,color=T.accent,size="sm"}){
+  return(
+    <span style={{display:"inline-flex",alignItems:"center",
+      padding:size==="sm"?"2px 8px":"5px 12px",borderRadius:20,
+      background:`${color}15`,border:`1px solid ${color}35`,
+      color,fontSize:size==="sm"?11:13,fontWeight:600,
+      letterSpacing:".03em",whiteSpace:"nowrap"}}>{text}</span>
+  );
+}
+
+function LiveDot(){
+  return <span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",
+    background:T.accent,animation:"pulseDot 2s infinite",
+    verticalAlign:"middle",marginRight:6}}/>;
+}
+function Divider({style={}}){
+  return <div style={{height:1,background:T.border,margin:"14px 0",...style}}/>;
+}
+function SHead({title,sub,right}){
+  return(
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:22}}>
+      <div>
+        <h2 style={{fontFamily:F.display,fontSize:20,fontWeight:700,color:T.text,
+          margin:0,letterSpacing:"-.02em",lineHeight:1.2}}>{title}</h2>
+        {sub&&<p style={{margin:"5px 0 0",fontSize:13,color:T.textMuted,lineHeight:1.5}}>{sub}</p>}
+      </div>
+      {right}
+    </div>
+  );
+}
+function Err({msg}){
+  return msg?<div style={{padding:"10px 16px",borderRadius:10,marginBottom:14,
+    background:T.roseSubtle,border:`1px solid ${T.rose}35`,
+    color:T.rose,fontSize:13}}>⚠ {msg}</div>:null;
+}
+function Skeleton({height=80,radius=12}){
+  return <div style={{height,borderRadius:radius,background:T.card,
+    backgroundImage:`linear-gradient(90deg,${T.card} 0%,${T.overlay} 40%,${T.card} 80%)`,
+    backgroundSize:"200% 100%",animation:"shimmer 1.8s ease infinite"}}/>;
+}
+
+const ChartTip=({active,payload,label})=>{
+  if(!active||!payload?.length) return null;
+  return(
+    <div style={{background:T.overlay,border:`1px solid ${T.borderLight}`,
+      borderRadius:12,padding:"11px 15px",boxShadow:"0 12px 40px rgba(0,0,0,.6)"}}>
+      <div style={{fontSize:11,color:T.textMuted,marginBottom:8,fontFamily:F.mono}}>{label}</div>
+      {payload.map((p,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+          <div style={{width:6,height:6,borderRadius:2,background:p.color}}/>
+          <span style={{fontSize:12,color:T.textSub,minWidth:80}}>{p.name}</span>
+          <span style={{fontSize:13,fontWeight:700,color:p.color,fontFamily:F.mono}}>
+            {typeof p.value==="number"?p.value.toFixed(1):p.value}</span>
         </div>
-      </div>
-      <div style={{ fontSize:12, color:C.muted, marginTop:4 }}>{label}</div>
+      ))}
     </div>
   );
-}
+};
 
-// ─────────────────────────────────────────────────────────────
-// NAV
-// ─────────────────────────────────────────────────────────────
-const NAV_ITEMS = [
-  { id:"dashboard", label:"Dashboard",       icon:"🌿" },
-  { id:"sensors",   label:"Sensor Monitor",  icon:"📡" },
-  { id:"recommend", label:"AI Advisor",      icon:"🤖" },
-  { id:"analytics", label:"Analytics",       icon:"📊" },
-  { id:"weather",   label:"Weather",         icon:"🌦️" },
+// ── Sidebar ───────────────────────────────────────────────────
+const NAV=[
+  {id:"overview",label:"Overview",   icon:"▤"},
+  {id:"sensors", label:"Sensor Live",icon:"◎"},
+  {id:"ai",      label:"AI Advisor", icon:"◈"},
+  {id:"analytics",label:"Analytics", icon:"▦"},
+  {id:"weather", label:"Weather",    icon:"◌"},
 ];
 
-function Sidebar({ active, onNav, status }) {
-  const mlOk      = status?.ml_models === "loaded";
-  const weatherOk = status?.weather_api === "configured";
-  const dbOk      = status?.mongodb === "connected";
-
-  return (
-    <div style={{
-      width:220, minHeight:"100vh", flexShrink:0,
-      background: C.surface,
-      borderRight:`1px solid ${C.border}`,
-      display:"flex", flexDirection:"column",
-      padding:"28px 0"
-    }}>
-      {/* Logo */}
-      <div style={{ padding:"0 20px 28px" }}>
-        <div style={{
-          fontFamily:"'Playfair Display', serif",
-          fontSize:20, fontWeight:700, color:C.green,
-          lineHeight:1.2
-        }}>🌾 AgriSense</div>
-        <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>
-          Smart Agriculture System
+function Sidebar({page,setPage,health}){
+  const sys=[
+    {label:"MongoDB Atlas",ok:health?.mongodb==="connected"},
+    {label:"ML Engine",    ok:health?.ml_models==="loaded"},
+    {label:"Weather API",  ok:health?.weather_api==="configured"},
+  ];
+  return(
+    <aside style={{width:230,flexShrink:0,background:T.surface,
+      borderRight:`1px solid ${T.border}`,display:"flex",
+      flexDirection:"column",height:"100vh",position:"sticky",top:0}}>
+      <div style={{padding:"22px 18px 18px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:11}}>
+          <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
+            background:`linear-gradient(135deg,${T.accentDim},${T.accent})`,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:18,boxShadow:`0 4px 12px ${T.accent}30`}}>🌿</div>
+          <div>
+            <div style={{fontFamily:F.display,fontWeight:700,fontSize:17,color:T.text,
+              lineHeight:1.1,letterSpacing:"-.02em"}}>AgriSense</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Smart Agriculture</div>
+          </div>
         </div>
       </div>
-
-      {/* Nav */}
-      <nav style={{ flex:1 }}>
-        {NAV_ITEMS.map(item => (
-          <button key={item.id} onClick={() => onNav(item.id)}
-            style={{
-              width:"100%", display:"flex", alignItems:"center",
-              gap:10, padding:"11px 20px",
-              background: active === item.id ? `${C.green}18` : "transparent",
-              borderLeft: active === item.id ? `3px solid ${C.green}` : "3px solid transparent",
-              border:"none", cursor:"pointer",
-              color: active === item.id ? C.green : C.textDim,
-              fontSize:14, fontWeight: active === item.id ? 600 : 400,
-              transition:"all 0.2s", textAlign:"left"
-            }}>
-            <span>{item.icon}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
+      <Divider style={{margin:"0 18px 8px"}}/>
+      <nav style={{flex:1,padding:"0 10px"}}>
+        {NAV.map(n=>{
+          const active=page===n.id;
+          return(
+            <NavBtn key={n.id} active={active} onClick={()=>setPage(n.id)}>
+              <span style={{width:28,height:28,borderRadius:7,flexShrink:0,
+                display:"flex",alignItems:"center",justifyContent:"center",
+                background:active?`${T.accent}20`:"transparent",
+                color:active?T.accent:T.textMuted,fontSize:13,transition:"all .2s"}}>{n.icon}</span>
+              <span style={{fontSize:14,fontWeight:active?600:400,
+                color:active?T.text:T.textSub}}>{n.label}</span>
+              {active&&<div style={{marginLeft:"auto",width:4,height:16,borderRadius:2,
+                background:T.accent,flexShrink:0}}/>}
+            </NavBtn>
+          );
+        })}
       </nav>
-
-      {/* System Status */}
-      <div style={{ padding:"16px 20px", borderTop:`1px solid ${C.border}` }}>
-        <div style={{ fontSize:11, color:C.muted, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>
-          System
-        </div>
-        {[
-          { label:"MongoDB",   ok:dbOk,      icon:"🍃" },
-          { label:"ML Models", ok:mlOk,      icon:"🤖" },
-          { label:"Weather",   ok:weatherOk, icon:"🌦️" },
-        ].map(s => (
-          <div key={s.label} style={{
-            display:"flex", alignItems:"center", justifyContent:"space-between",
-            marginBottom:5
-          }}>
-            <span style={{ fontSize:12, color:C.textDim }}>{s.icon} {s.label}</span>
-            <span style={{
-              width:7, height:7, borderRadius:"50%",
-              background: s.ok ? C.green : "#ef4444",
-              boxShadow: s.ok ? `0 0 6px ${C.green}` : "none"
-            }}/>
+      <div style={{padding:"14px 18px",borderTop:`1px solid ${T.border}`}}>
+        <div style={{fontSize:10,color:T.textDim,marginBottom:10,textTransform:"uppercase",
+          letterSpacing:".09em",fontWeight:700}}>System Status</div>
+        {sys.map(s=>(
+          <div key={s.label} style={{display:"flex",alignItems:"center",
+            justifyContent:"space-between",marginBottom:8}}>
+            <span style={{fontSize:12,color:T.textSub}}>{s.label}</span>
+            <div style={{display:"flex",alignItems:"center",gap:5}}>
+              <span style={{width:6,height:6,borderRadius:"50%",flexShrink:0,
+                background:s.ok?T.accent:T.rose,
+                boxShadow:s.ok?`0 0 8px ${T.accent}`:"none",
+                animation:s.ok?"pulseDot 3s infinite":"none"}}/>
+              <span style={{fontSize:11,color:s.ok?T.accent:T.rose,fontWeight:500}}>
+                {s.ok?"Online":"Offline"}</span>
+            </div>
           </div>
         ))}
       </div>
-    </div>
+    </aside>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// PAGE: DASHBOARD
-// ─────────────────────────────────────────────────────────────
-function DashboardPage() {
-  const { data: sensor, loading: sLoad, error: sErr } =
-    usePolling(useCallback(() => getLatestReading(), []), 8000);
-  const { data: history } =
-    usePolling(useCallback(() => getSensorHistory(30), []), 15000);
-  const { data: weather } =
-    usePolling(useCallback(() => getCurrentWeather(), []), 300000);
-  const { data: recommend } =
-    usePolling(useCallback(() => getFullRecommendation(), []), 60000);
+function NavBtn({active,onClick,children}){
+  const [hov,setHov]=useState(false);
+  return(
+    <button onClick={onClick}
+      onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{width:"100%",display:"flex",alignItems:"center",gap:10,
+        padding:"8px 10px",borderRadius:10,marginBottom:3,
+        background:active?`${T.accent}12`:hov?`${T.text}06`:"transparent",
+        border:"none",transition:"all .15s",cursor:"pointer",textAlign:"left"}}>
+      {children}
+    </button>
+  );
+}
 
-  const chartData = (history?.readings || [])
-    .slice().reverse()
-    .map((r, i) => ({
-      t:        timeLabel(r.received_at),
-      temp:     r.temperature_c,
-      humidity: r.humidity_pct,
-      moisture: r.soil_moisture_pct,
-      ph:       r.ph_value,
-    }));
+// ── Overview Page ─────────────────────────────────────────────
+function OverviewPage(){
+  const {data:sensor,error:sErr}=usePolling(useCallback(()=>getLatestReading(),[]),8000);
+  const {data:hist}=usePolling(useCallback(()=>getSensorHistory(45),[]),15000);
+  const {data:weather}=usePolling(useCallback(()=>getCurrentWeather(),[]),300000);
+  const {data:rec}=usePolling(useCallback(()=>getFullRecommendation(),[]),60000);
 
-  const urgencyColor = {
-    low:    C.green,
-    medium: C.amber,
-    high:   C.rose,
-  };
+  const series=(hist?.readings||[]).slice().reverse().map(r=>({
+    t:hhmm(r.received_at),temp:r.temperature_c,
+    hum:r.humidity_pct,mois:r.soil_moisture_pct,
+  }));
+  const uc={low:T.accent,medium:T.amber,high:T.rose};
+  const wIcon=c=>({Clear:"☀️",Clouds:"⛅",Rain:"🌧️",Drizzle:"🌦️",
+    Thunderstorm:"⛈️",Mist:"🌫️"}[c]||"🌤️");
 
-  return (
+  return(
     <div>
-      {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:28 }}>
+      <div style={{display:"flex",justifyContent:"space-between",
+        alignItems:"flex-start",marginBottom:26}}>
         <div>
-          <h1 style={{
-            fontFamily:"'Playfair Display', serif",
-            fontSize:32, fontWeight:700, color:C.text,
-            margin:0, letterSpacing:"-0.01em"
-          }}>
-            Farm Overview
-          </h1>
-          <p style={{ color:C.muted, margin:"6px 0 0", fontSize:14 }}>
-            Real-time monitoring · {sensor ? <><LiveDot/> Live</> : "Waiting for data"}
+          <h1 style={{fontFamily:F.display,fontSize:26,fontWeight:700,
+            color:T.text,margin:0,letterSpacing:"-.03em"}}>Farm Overview</h1>
+          <p style={{margin:"5px 0 0",fontSize:13,color:T.textMuted,
+            display:"flex",alignItems:"center"}}>
+            {sensor?<><LiveDot/>Live · updated {ago(sensor?.received_at)}</>
+              :"Waiting for sensor data…"}
           </p>
         </div>
-        {weather && (
-          <div style={{
-            background:C.surface, border:`1px solid ${C.border}`,
-            borderRadius:12, padding:"10px 16px",
-            textAlign:"right"
-          }}>
-            <div style={{ fontSize:22 }}>
-              {weather.condition_main === "Rain" ? "🌧️" :
-               weather.condition_main === "Clouds" ? "⛅" :
-               weather.condition_main === "Clear" ? "☀️" : "🌤️"}
+        {weather&&(
+          <div style={{display:"flex",alignItems:"center",gap:12,
+            padding:"10px 16px",borderRadius:14,background:T.card,
+            border:`1px solid ${T.border}`,cursor:"default",transition:"border-color .2s"}}
+            onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+            <span style={{fontSize:28}}>{wIcon(weather.condition_main)}</span>
+            <div>
+              <div style={{fontFamily:F.mono,fontSize:20,fontWeight:700,
+                color:T.text,lineHeight:1}}>{fmt(weather.temperature_c)}°C</div>
+              <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>
+                {weather.city} · {weather.condition_desc}</div>
             </div>
-            <div style={{ color:C.text, fontSize:16, fontWeight:600 }}>
-              {fmt(weather.temperature_c)}°C
-            </div>
-            <div style={{ color:C.muted, fontSize:12 }}>{weather.city}</div>
           </div>
         )}
       </div>
-
-      {sErr && <ErrorBanner msg={sErr} />}
-
-      {/* Gauges Row */}
-      {sLoad && !sensor ? <Spinner /> : (
-        <Card style={{ marginBottom:20 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
-            <span style={{ fontSize:13, color:C.muted }}>
-              SENSOR READINGS · Updated {ago(sensor?.received_at)}
-            </span>
-            {sensor && <Badge text={sensor.status === "ok" ? "All Sensors OK" : "Sensor Error"} color={sensor.status === "ok" ? C.green : C.rose}/>}
-          </div>
-          <div style={{ display:"flex", justifyContent:"space-around", flexWrap:"wrap", gap:20 }}>
-            <RadialGauge value={sensor?.temperature_c}  max={50}  label="Temperature"    unit="°C"  color={C.rose}  />
-            <RadialGauge value={sensor?.humidity_pct}   max={100} label="Humidity"       unit="%"   color={C.teal}  />
-            <RadialGauge value={sensor?.soil_moisture_pct} max={100} label="Soil Moisture" unit="%" color={C.green} />
-            <RadialGauge value={sensor?.ph_value}       max={14}  label="Soil pH"        unit="pH"  color={C.amber} />
-          </div>
-        </Card>
-      )}
-
-      {/* Stats Row */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
-        <StatPill label="Temperature" value={fmt(sensor?.temperature_c)} unit="°C"  color={C.rose}  icon="🌡️" />
-        <StatPill label="Humidity"    value={pct(sensor?.humidity_pct)}  unit=""    color={C.teal}  icon="💧" />
-        <StatPill label="Soil Moisture" value={pct(sensor?.soil_moisture_pct)} unit="" color={C.green} icon="🌱" />
-        <StatPill label="Soil pH"     value={fmt(sensor?.ph_value)}      unit="pH"  color={C.amber} icon="⚗️" />
+      <Err msg={sErr}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:18}}>
+        <Metric label="Temperature" value={sensor?.temperature_c} decimals={1}
+          unit="°C" color={T.rose} icon="🌡️"
+          sub={sensor?.temperature_c>35?"⚠ Heat stress":"Normal range"}/>
+        <Metric label="Humidity" value={sensor?.humidity_pct} decimals={1}
+          unit="%" color={T.blue} icon="💧"
+          sub={`Updated ${ago(sensor?.received_at)}`}/>
+        <Metric label="Soil Moisture" value={sensor?.soil_moisture_pct} decimals={1}
+          unit="%" color={T.accent} icon="🌱"
+          sub={sensor?.moisture_level||"—"}/>
+        <Metric label="Soil pH" value={sensor?.ph_value} decimals={2}
+          unit="pH" color={T.amber} icon="⚗️"
+          sub={sensor?.ph_category||"—"}/>
       </div>
-
-      {/* Chart + Recommendations */}
-      <div style={{ display:"grid", gridTemplateColumns:"1.6fr 1fr", gap:16 }}>
-        {/* Chart */}
+      <div style={{display:"grid",gridTemplateColumns:"1.65fr 1fr",gap:14,marginBottom:14}}>
         <Card>
-          <div style={{ marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <span style={{ fontFamily:"'Playfair Display',serif", fontSize:16, fontWeight:600, color:C.text }}>
-              Sensor Trends
-            </span>
-            <Badge text="Last 30 readings" color={C.teal}/>
+          <div style={{display:"flex",justifyContent:"space-between",
+            alignItems:"center",marginBottom:16}}>
+            <div>
+              <div style={{fontFamily:F.display,fontWeight:600,fontSize:15,
+                color:T.text,letterSpacing:"-.01em"}}>Sensor Trends</div>
+              <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>Last 45 readings</div>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              {[["Temp",T.rose],["Moisture",T.accent],["Humidity",T.blue]].map(([l,c])=>(
+                <div key={l} style={{display:"flex",alignItems:"center",gap:4,
+                  fontSize:11,color:T.textSub}}>
+                  <div style={{width:10,height:2,background:c,borderRadius:1}}/>{l}
+                </div>
+              ))}
+            </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={chartData}>
+          <ResponsiveContainer width="100%" height={195}>
+            <AreaChart data={series} margin={{top:4,right:4,bottom:0,left:-20}}>
               <defs>
-                <linearGradient id="gTemp" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={C.rose}  stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={C.rose}  stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="gMoisture" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={C.green} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={C.green} stopOpacity={0}/>
-                </linearGradient>
+                {[[T.rose,"gR"],[T.accent,"gG"],[T.blue,"gB"]].map(([c,id])=>(
+                  <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={c} stopOpacity={0.28}/>
+                    <stop offset="95%" stopColor={c} stopOpacity={0}/>
+                  </linearGradient>
+                ))}
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-              <XAxis dataKey="t" tick={{ fill:C.muted, fontSize:10 }} />
-              <YAxis tick={{ fill:C.muted, fontSize:10 }} />
-              <Tooltip
-                contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8 }}
-                labelStyle={{ color:C.text }}
-                itemStyle={{ color:C.textDim }}
-              />
-              <Area type="monotone" dataKey="temp"     name="Temp °C"   stroke={C.rose}  fill="url(#gTemp)"     strokeWidth={2} dot={false}/>
-              <Area type="monotone" dataKey="moisture" name="Moisture %" stroke={C.green} fill="url(#gMoisture)" strokeWidth={2} dot={false}/>
-              <Line type="monotone" dataKey="humidity" name="Humidity %" stroke={C.teal}  strokeWidth={1.5} dot={false} strokeDasharray="4 2"/>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false}/>
+              <XAxis dataKey="t" tick={{fill:T.textDim,fontSize:10}}
+                axisLine={false} tickLine={false}/>
+              <YAxis tick={{fill:T.textDim,fontSize:10}}
+                axisLine={false} tickLine={false}/>
+              <Tooltip content={<ChartTip/>}/>
+              <Area type="monotone" dataKey="temp" name="Temp °C"
+                stroke={T.rose} fill="url(#gR)" strokeWidth={1.8} dot={false}/>
+              <Area type="monotone" dataKey="mois" name="Moisture %"
+                stroke={T.accent} fill="url(#gG)" strokeWidth={1.8} dot={false}/>
+              <Area type="monotone" dataKey="hum" name="Humidity %"
+                stroke={T.blue} fill="url(#gB)" strokeWidth={1.5} dot={false}
+                strokeDasharray="5 3"/>
             </AreaChart>
           </ResponsiveContainer>
         </Card>
-
-        {/* Quick Recommendations */}
-        <Card>
-          <div style={{ marginBottom:14 }}>
-            <span style={{ fontFamily:"'Playfair Display',serif", fontSize:16, fontWeight:600, color:C.text }}>
-              AI Recommendations
-            </span>
+        <Card glow>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+            <div style={{width:24,height:24,borderRadius:6,
+              background:`${T.accent}20`,display:"flex",alignItems:"center",
+              justifyContent:"center",fontSize:12,color:T.accent}}>◈</div>
+            <span style={{fontFamily:F.display,fontWeight:600,fontSize:15,
+              color:T.text,letterSpacing:"-.01em"}}>AI Snapshot</span>
+            <Badge text="LIVE" color={T.accent}/>
           </div>
-          {recommend ? (
-            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-              {recommend.crop && (
-                <div style={{ padding:"12px 14px", borderRadius:10, background:C.surface, border:`1px solid ${C.border}` }}>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>🌾 RECOMMENDED CROP</div>
-                  <div style={{ color:C.green, fontSize:18, fontFamily:"'Playfair Display',serif", fontWeight:700, textTransform:"capitalize" }}>
-                    {recommend.crop.crop}
-                  </div>
-                  <ConfidenceBar value={recommend.crop.confidence} color={C.green}/>
-                </div>
+          {rec?(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {rec.crop&&(
+                <AISnip label="Recommended Crop" color={T.accent} icon="🌾">
+                  <div style={{fontFamily:F.display,fontSize:19,fontWeight:700,
+                    color:T.accent,textTransform:"capitalize",letterSpacing:"-.01em"}}>
+                    {rec.crop.crop}</div>
+                  <ConfRow value={rec.crop.confidence} color={T.accent}/>
+                </AISnip>
               )}
-              {recommend.irrigation && (
-                <div style={{ padding:"12px 14px", borderRadius:10, background:C.surface, border:`1px solid ${C.border}` }}>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>💧 IRRIGATION</div>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <span style={{
-                      color: urgencyColor[recommend.irrigation.urgency] || C.amber,
-                      fontSize:15, fontWeight:600, textTransform:"capitalize"
-                    }}>
-                      {recommend.irrigation.action?.replace(/_/g," ")}
-                    </span>
-                    <Badge
-                      text={recommend.irrigation.urgency?.toUpperCase()}
-                      color={urgencyColor[recommend.irrigation.urgency] || C.amber}
-                    />
-                  </div>
-                  {recommend.irrigation.water_amount_mm && (
-                    <div style={{ fontSize:12, color:C.muted, marginTop:4 }}>
-                      Apply {recommend.irrigation.water_amount_mm}mm
+              {rec.irrigation&&(()=>{
+                const c=uc[rec.irrigation.urgency]||T.amber;
+                return(
+                  <AISnip label="Irrigation" color={c} icon="💧"
+                    right={<Badge text={rec.irrigation.urgency} color={c}/>}>
+                    <div style={{fontSize:14,fontWeight:600,color:c,textTransform:"capitalize"}}>
+                      {rec.irrigation.action?.replace(/_/g," ")}
+                      {rec.irrigation.water_amount_mm&&
+                        <span style={{color:T.textMuted,fontWeight:400,marginLeft:6,fontSize:12}}>
+                          · {rec.irrigation.water_amount_mm}mm</span>}
                     </div>
-                  )}
-                </div>
-              )}
-              {recommend.fertilizer && (
-                <div style={{ padding:"12px 14px", borderRadius:10, background:C.surface, border:`1px solid ${C.border}` }}>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>🧪 FERTILIZER</div>
-                  <div style={{ color:C.amber, fontSize:15, fontWeight:600 }}>
-                    {recommend.fertilizer.fertilizer}
-                  </div>
-                  <ConfidenceBar value={recommend.fertilizer.confidence} color={C.amber}/>
-                </div>
+                    <ConfRow value={rec.irrigation.confidence} color={c}/>
+                  </AISnip>
+                );
+              })()}
+              {rec.fertilizer&&(
+                <AISnip label="Fertilizer" color={T.amber} icon="🧪">
+                  <div style={{fontSize:15,fontWeight:600,color:T.amber}}>
+                    {rec.fertilizer.fertilizer}</div>
+                  <ConfRow value={rec.fertilizer.confidence} color={T.amber}/>
+                </AISnip>
               )}
             </div>
-          ) : <div style={{ color:C.muted, fontSize:13, textAlign:"center", padding:20 }}>Loading recommendations…</div>}
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <Skeleton height={70}/><Skeleton height={70}/><Skeleton height={70}/>
+            </div>
+          )}
         </Card>
+      </div>
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",
+          alignItems:"center",marginBottom:14}}>
+          <div style={{fontFamily:F.display,fontWeight:600,fontSize:15,color:T.text}}>
+            Recent Readings</div>
+          <Badge text="Auto-refresh 8s" color={T.accent}/>
+        </div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead><tr>
+              {["Time","Temp (°C)","Humidity (%)","Moisture (%)","pH","Status"].map(h=>(
+                <th key={h} style={{padding:"8px 14px",textAlign:"left",
+                  color:T.textDim,fontWeight:600,fontSize:10,
+                  textTransform:"uppercase",letterSpacing:".06em",
+                  borderBottom:`1px solid ${T.border}`}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {(hist?.readings||[]).slice(0,8).map((r,i)=><TRow key={i} r={r}/>)}
+            </tbody>
+          </table>
+          {(!hist?.readings||hist.readings.length===0)&&(
+            <div style={{padding:"28px 14px",textAlign:"center",
+              color:T.textMuted,fontSize:13}}>
+              No readings yet — start your ESP32 to see data</div>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function AISnip({label,color,icon,children,right}){
+  const [hov,setHov]=useState(false);
+  return(
+    <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{padding:"11px 13px",borderRadius:11,
+        background:hov?`${color}12`:`${color}08`,
+        border:`1px solid ${hov?color+"40":color+"20"}`,
+        transition:"all .2s"}}>
+      <div style={{display:"flex",justifyContent:"space-between",
+        alignItems:"center",marginBottom:7}}>
+        <div style={{fontSize:10,color,textTransform:"uppercase",
+          letterSpacing:".08em",fontWeight:700}}>{icon} {label}</div>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TRow({r}){
+  const [hov,setHov]=useState(false);
+  return(
+    <tr onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{background:hov?`${T.accent}07`:"transparent",transition:"background .15s"}}>
+      {[
+        {v:hhmm(r.received_at),c:T.textSub},
+        {v:fmt(r.temperature_c),c:T.rose},
+        {v:fmt(r.humidity_pct),c:T.blue},
+        {v:fmt(r.soil_moisture_pct),c:T.accent},
+        {v:fmt(r.ph_value,2),c:T.amber},
+        {badge:true},
+      ].map((cell,i)=>(
+        <td key={i} style={{padding:"9px 14px",
+          borderBottom:`1px solid ${T.border}18`,
+          color:cell.c,fontFamily:F.mono,fontSize:13}}>
+          {cell.badge
+            ?<Badge text={r.has_errors?"Error":"OK"}
+                color={r.has_errors?T.rose:T.accent}/>
+            :cell.v}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+// ── Sensor Live Page ──────────────────────────────────────────
+function SensorsPage(){
+  const {data:sensor}=usePolling(useCallback(()=>getLatestReading(),[]),8000);
+  const {data:hist}=usePolling(useCallback(()=>getSensorHistory(60),[]),15000);
+  const readings=(hist?.readings||[]).slice().reverse();
+  const SENSORS=[
+    {key:"temperature_c",    label:"Temperature",  unit:"°C",color:T.rose,  icon:"🌡️",lo:0, hi:50},
+    {key:"humidity_pct",     label:"Humidity",     unit:"%" ,color:T.blue,  icon:"💧",lo:0, hi:100},
+    {key:"soil_moisture_pct",label:"Soil Moisture",unit:"%" ,color:T.accent,icon:"🌱",lo:0, hi:100},
+    {key:"ph_value",         label:"Soil pH",      unit:"pH",color:T.amber, icon:"⚗️",lo:0, hi:14},
+  ];
+  return(
+    <div>
+      <SHead title="Sensor Live Monitor" sub="ESP32 telemetry · auto-refreshes every 8 seconds"/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:18}}>
+        {SENSORS.map(s=>{
+          const val=sensor?.[s.key];
+          const pct=clamp(((val-s.lo)/(s.hi-s.lo))*100,0,100);
+          const warn=s.key==="soil_moisture_pct"&&(val||0)<30;
+          return(
+            <Card key={s.key} accent={warn?T.rose:s.color} glow={warn}>
+              <div style={{display:"flex",justifyContent:"space-between",
+                alignItems:"flex-start",marginBottom:10}}>
+                <div style={{fontSize:11,color:T.textMuted,textTransform:"uppercase",
+                  letterSpacing:".06em",fontWeight:600}}>{s.icon} {s.label}</div>
+                {warn&&<Badge text="LOW" color={T.rose}/>}
+              </div>
+              <div style={{fontFamily:F.mono,fontSize:40,fontWeight:600,color:s.color,
+                lineHeight:1,marginBottom:14,letterSpacing:"-.03em"}}>
+                {fmt(val)}<span style={{fontSize:15,fontWeight:400,
+                  color:T.textMuted}}> {s.unit}</span>
+              </div>
+              <ProgressBar value={pct} color={s.color} height={5}/>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+                <span style={{fontSize:10,color:T.textDim}}>{s.lo}</span>
+                <span style={{fontSize:10,color:T.textDim}}>{s.hi} {s.unit}</span>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        {SENSORS.map(s=>{
+          const data=readings.map(r=>({t:hhmm(r.received_at),v:r[s.key]}));
+          return(
+            <Card key={s.key}>
+              <div style={{marginBottom:12,display:"flex",justifyContent:"space-between",
+                alignItems:"center"}}>
+                <div style={{fontFamily:F.display,fontWeight:600,fontSize:14,
+                  color:T.text,letterSpacing:"-.01em"}}>{s.icon} {s.label}</div>
+                <span style={{fontFamily:F.mono,fontSize:19,fontWeight:600,color:s.color}}>
+                  {fmt(sensor?.[s.key])} <span style={{fontSize:12,fontWeight:400,
+                    color:T.textMuted}}>{s.unit}</span>
+                </span>
+              </div>
+              <ResponsiveContainer width="100%" height={130}>
+                <LineChart data={data} margin={{top:4,right:4,bottom:0,left:-28}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false}/>
+                  <XAxis dataKey="t" tick={{fill:T.textDim,fontSize:9}}
+                    axisLine={false} tickLine={false} interval="preserveStartEnd"/>
+                  <YAxis tick={{fill:T.textDim,fontSize:9}}
+                    axisLine={false} tickLine={false} domain={[s.lo,s.hi]}/>
+                  <Tooltip content={<ChartTip/>}/>
+                  <Line type="monotone" dataKey="v" name={`${s.label} (${s.unit})`}
+                    stroke={s.color} strokeWidth={2} dot={false}
+                    activeDot={{r:5,fill:s.color,stroke:T.card,strokeWidth:2}}/>
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// PAGE: SENSOR MONITOR
-// ─────────────────────────────────────────────────────────────
-function SensorsPage() {
-  const { data: sensor, loading } =
-    usePolling(useCallback(() => getLatestReading(), []), 8000);
-  const { data: histData } =
-    usePolling(useCallback(() => getSensorHistory(50), []), 15000);
-
-  const readings = (histData?.readings || []).slice().reverse();
-
-  const charts = [
-    { key:"temperature_c",     label:"Temperature",   unit:"°C",  color:C.rose,  icon:"🌡️" },
-    { key:"humidity_pct",      label:"Humidity",      unit:"%",   color:C.teal,  icon:"💧" },
-    { key:"soil_moisture_pct", label:"Soil Moisture", unit:"%",   color:C.green, icon:"🌱" },
-    { key:"ph_value",          label:"Soil pH",       unit:"pH",  color:C.amber, icon:"⚗️" },
-  ];
-
-  return (
-    <div>
-      <SectionTitle icon="📡" title="Sensor Monitor" sub="Live readings from ESP32 — auto-refreshes every 8 seconds"/>
-
-      {loading && !sensor ? <Spinner/> : (
-        <>
-          {/* Current values */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:24 }}>
-            {charts.map(c => (
-              <Card key={c.key} glow={c.key==="soil_moisture_pct" && (sensor?.[c.key] || 0) < 30}>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                  {c.icon} {c.label}
-                </div>
-                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:36, fontWeight:700, color:c.color, lineHeight:1 }}>
-                  {fmt(sensor?.[c.key], 1)}
-                  <span style={{ fontSize:14, color:C.muted, fontWeight:400 }}> {c.unit}</span>
-                </div>
-                {sensor && (
-                  <div style={{ marginTop:10, fontSize:12, color:C.muted }}>
-                    Updated {ago(sensor.received_at)}
-                  </div>
-                )}
-              </Card>
-            ))}
-          </div>
-
-          {/* Individual sensor history charts */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-            {charts.map(c => {
-              const chartData = readings.map(r => ({
-                t:     timeLabel(r.received_at),
-                value: r[c.key],
-              }));
-              return (
-                <Card key={c.key}>
-                  <div style={{ marginBottom:12, fontSize:14, fontWeight:600, color:C.text }}>
-                    {c.icon} {c.label} History
-                  </div>
-                  <ResponsiveContainer width="100%" height={150}>
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                      <XAxis dataKey="t" tick={{ fill:C.muted, fontSize:9 }} interval="preserveStartEnd"/>
-                      <YAxis tick={{ fill:C.muted, fontSize:9 }}/>
-                      <Tooltip
-                        contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6 }}
-                        itemStyle={{ color:c.color }}
-                        labelStyle={{ color:C.text, fontSize:11 }}
-                      />
-                      <Line type="monotone" dataKey="value" name={`${c.label} (${c.unit})`}
-                        stroke={c.color} strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </Card>
-              );
-            })}
-          </div>
-
-          {/* Latest readings table */}
-          <Card style={{ marginTop:16 }}>
-            <div style={{ marginBottom:14, fontSize:14, fontWeight:600, color:C.text }}>
-              📋 Recent Readings
-            </div>
-            <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-                <thead>
-                  <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-                    {["Time","Temp (°C)","Humidity (%)","Moisture (%)","pH","Status"].map(h => (
-                      <th key={h} style={{ padding:"8px 12px", textAlign:"left", color:C.muted, fontWeight:500, fontSize:11 }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {readings.slice(0,15).map((r, i) => (
-                    <tr key={i} style={{ borderBottom:`1px solid ${C.border}22` }}>
-                      <td style={{ padding:"8px 12px", color:C.textDim }}>{timeLabel(r.received_at)}</td>
-                      <td style={{ padding:"8px 12px", color:C.rose   }}>{fmt(r.temperature_c)}</td>
-                      <td style={{ padding:"8px 12px", color:C.teal   }}>{fmt(r.humidity_pct)}</td>
-                      <td style={{ padding:"8px 12px", color:C.green  }}>{fmt(r.soil_moisture_pct)}</td>
-                      <td style={{ padding:"8px 12px", color:C.amber  }}>{fmt(r.ph_value)}</td>
-                      <td style={{ padding:"8px 12px" }}>
-                        <Badge
-                          text={r.has_errors ? "Error" : "OK"}
-                          color={r.has_errors ? C.rose : C.green}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// PAGE: AI ADVISOR
-// ─────────────────────────────────────────────────────────────
-function RecommendPage() {
-  const { data: full, loading, error, refetch } =
-    usePolling(useCallback(() => getFullRecommendation(), []), 0);
-
-  // Custom crop form state
-  const [cropForm, setCropForm] = useState({ nitrogen:60, phosphorus:40, potassium:40, ph:6.5 });
-  const [cropResult, setCropResult] = useState(null);
-  const [cropLoading, setCropLoading] = useState(false);
-
-  const handleCropSubmit = async () => {
-    setCropLoading(true);
-    try {
-      const r = await postCropRecommendation(cropForm);
-      setCropResult(r);
-    } catch(e) { alert(e.message); }
-    finally { setCropLoading(false); }
+// ── AI Advisor Page ───────────────────────────────────────────
+function AIPage(){
+  const {data:rec,loading,error,refetch}=
+    usePolling(useCallback(()=>getFullRecommendation(),[]),0);
+  const [form,setForm]=useState({nitrogen:60,phosphorus:40,potassium:40,ph:6.5});
+  const [custom,setCustom]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const uc={low:T.accent,medium:T.amber,high:T.rose};
+  const runCustom=async()=>{
+    setBusy(true);
+    try{setCustom(await postCropRecommendation(form));}
+    catch(e){alert(e.message);}
+    finally{setBusy(false);}
   };
 
-  const urgencyColor = { low:C.green, medium:C.amber, high:C.rose };
+  function CHead({label,color,badge}){
+    return(
+      <div style={{display:"flex",justifyContent:"space-between",
+        alignItems:"flex-start",marginBottom:14}}>
+        <div style={{fontSize:11,color,textTransform:"uppercase",
+          letterSpacing:".08em",fontWeight:700}}>{label}</div>
+        <Badge text={badge} color={color}/>
+      </div>
+    );
+  }
+  function TopM({rank,label,pct,color}){
+    const [hov,setHov]=useState(false);
+    return(
+      <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+        style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+          padding:"6px 0",paddingLeft:hov?4:0,
+          borderBottom:`1px solid ${T.border}18`,
+          transition:"padding-left .15s"}}>
+        <span style={{color:T.textSub,fontSize:13,textTransform:"capitalize"}}>
+          {["🥇","🥈","🥉"][rank]} {label}</span>
+        <span style={{color,fontFamily:F.mono,fontSize:13,fontWeight:700}}>{pct}%</span>
+      </div>
+    );
+  }
 
-  return (
+  return(
     <div>
-      <SectionTitle icon="🤖" title="AI Advisor" sub="ML-powered recommendations from your live sensor and weather data"/>
-
-      {error && <ErrorBanner msg={error}/>}
-
-      {/* Full recommendation cards */}
-      {loading && !full ? <Spinner/> : full && (
+      <SHead title="AI Advisor"
+        sub="ML-powered crop, fertilizer & irrigation recommendations"
+        right={
+          <button onClick={refetch}
+            style={{padding:"8px 16px",borderRadius:9,
+              background:T.accentSubtle,border:`1px solid ${T.accent}35`,
+              color:T.accent,fontSize:13,fontWeight:600,cursor:"pointer",
+              fontFamily:F.body,transition:"all .2s"}}
+            onMouseEnter={e=>e.currentTarget.style.background=T.accent+"22"}
+            onMouseLeave={e=>e.currentTarget.style.background=T.accentSubtle}>
+            ↺ Refresh</button>
+        }/>
+      <Err msg={error}/>
+      {rec?.warnings?.map((w,i)=>(
+        <div key={i} style={{padding:"9px 14px",borderRadius:9,marginBottom:8,
+          background:T.amberSubtle,border:`1px solid ${T.amber}30`,
+          color:T.amber,fontSize:12}}>💡 {w}</div>
+      ))}
+      {loading&&!rec?(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}}>
+          {[0,1,2].map(i=><Skeleton key={i} height={300}/>)}
+        </div>
+      ):rec&&(
         <>
-          {full.warnings?.length > 0 && (
-            <div style={{ marginBottom:16 }}>
-              {full.warnings.map((w,i) => (
-                <div key={i} style={{
-                  background:"#1c1a0a", border:`1px solid ${C.amberDim}`,
-                  borderRadius:8, padding:"8px 14px",
-                  color:C.amber, fontSize:12, marginBottom:6
-                }}>💡 {w}</div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:16, marginBottom:20 }}>
-            {/* Crop */}
-            {full.crop && (
-              <Card glow>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:10, textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                  🌾 Crop Recommendation
-                </div>
-                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:28, fontWeight:700, color:C.green, textTransform:"capitalize", lineHeight:1.1 }}>
-                  {full.crop.crop}
-                </div>
-                <div style={{ margin:"12px 0" }}>
-                  <ConfidenceBar value={full.crop.confidence} color={C.green}/>
-                </div>
-                <p style={{ color:C.textDim, fontSize:13, lineHeight:1.6, margin:"10px 0" }}>
-                  {full.crop.advice}
-                </p>
-                <div style={{ marginTop:12 }}>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>Top 3 Matches</div>
-                  {full.crop.top_3_crops?.map((c,i) => (
-                    <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${C.border}22` }}>
-                      <span style={{ color:C.textDim, fontSize:13, textTransform:"capitalize" }}>
-                        {i===0?"🥇":i===1?"🥈":"🥉"} {c.label}
-                      </span>
-                      <span style={{ color:C.green, fontSize:13 }}>{Math.round(c.probability*100)}%</span>
-                    </div>
-                  ))}
-                </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:14}}>
+            {rec.crop&&(
+              <Card accent={T.accent}>
+                <CHead label="🌾 Recommended Crop" color={T.accent} badge={rec.crop.confidence_pct}/>
+                <div style={{fontFamily:F.display,fontSize:28,fontWeight:700,color:T.accent,
+                  textTransform:"capitalize",letterSpacing:"-.02em",lineHeight:1.1,marginBottom:14}}>
+                  {rec.crop.crop}</div>
+                <ConfRow label="Model confidence" value={rec.crop.confidence} color={T.accent}/>
+                <p style={{color:T.textSub,fontSize:13,lineHeight:1.7,margin:"12px 0 14px"}}>
+                  {rec.crop.advice}</p>
+                <Divider/>
+                <div style={{fontSize:10,color:T.textDim,marginBottom:8,fontWeight:700,
+                  textTransform:"uppercase",letterSpacing:".07em"}}>Top 3 Matches</div>
+                {rec.crop.top_3_crops?.map((c,i)=>
+                  <TopM key={i} rank={i} label={c.label}
+                    pct={Math.round(c.probability*100)} color={T.accent}/>)}
               </Card>
             )}
-
-            {/* Irrigation */}
-            {full.irrigation && (
-              <Card>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:10, textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                  💧 Irrigation Decision
-                </div>
-                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:700, lineHeight:1.2,
-                  color: urgencyColor[full.irrigation.urgency] || C.teal,
-                  textTransform:"capitalize"
-                }}>
-                  {full.irrigation.action?.replace(/_/g," ")}
-                </div>
-                <div style={{ margin:"10px 0" }}>
-                  <ConfidenceBar value={full.irrigation.confidence} color={urgencyColor[full.irrigation.urgency]}/>
-                </div>
-                <div style={{ display:"flex", gap:8, marginBottom:12 }}>
-                  <Badge text={`Urgency: ${full.irrigation.urgency?.toUpperCase()}`} color={urgencyColor[full.irrigation.urgency]}/>
-                </div>
-                {full.irrigation.water_amount_mm && (
-                  <div style={{
-                    padding:"10px 14px", borderRadius:8,
-                    background:C.surface, border:`1px solid ${C.border}`,
-                    textAlign:"center", marginBottom:10
-                  }}>
-                    <div style={{ fontFamily:"'Playfair Display',serif", fontSize:28, color:C.teal, fontWeight:700 }}>
-                      {full.irrigation.water_amount_mm}
-                      <span style={{ fontSize:14, color:C.muted }}> mm</span>
-                    </div>
-                    <div style={{ fontSize:11, color:C.muted }}>recommended water</div>
-                  </div>
-                )}
-                <p style={{ color:C.textDim, fontSize:13, lineHeight:1.6 }}>
-                  {full.irrigation.advice}
-                </p>
-              </Card>
-            )}
-
-            {/* Fertilizer */}
-            {full.fertilizer && (
-              <Card>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:10, textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                  🧪 Fertilizer Recommendation
-                </div>
-                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:24, fontWeight:700, color:C.amber, lineHeight:1.1 }}>
-                  {full.fertilizer.fertilizer}
-                </div>
-                <div style={{ margin:"10px 0" }}>
-                  <ConfidenceBar value={full.fertilizer.confidence} color={C.amber}/>
-                </div>
-                <p style={{ color:C.textDim, fontSize:13, lineHeight:1.6, margin:"10px 0" }}>
-                  {full.fertilizer.advice}
-                </p>
-                {full.fertilizer.npk_status && (
-                  <div style={{ marginTop:12 }}>
-                    <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>NPK Status</div>
-                    {Object.entries(full.fertilizer.npk_status).map(([k,v]) => (
-                      <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0" }}>
-                        <span style={{ color:C.textDim, fontSize:12, textTransform:"capitalize" }}>{k}</span>
-                        <Badge
-                          text={v}
-                          color={v==="optimal"?C.green:v==="low"?C.rose:C.amber}
-                        />
+            {rec.irrigation&&(()=>{
+              const c=uc[rec.irrigation.urgency]||T.teal;
+              return(
+                <Card accent={c}>
+                  <CHead label="💧 Irrigation" color={c}
+                    badge={rec.irrigation.urgency?.toUpperCase()}/>
+                  <div style={{fontFamily:F.display,fontSize:24,fontWeight:700,color:c,
+                    textTransform:"capitalize",letterSpacing:"-.02em",lineHeight:1.2,marginBottom:14}}>
+                    {rec.irrigation.action?.replace(/_/g," ")}</div>
+                  <ConfRow label="Model confidence" value={rec.irrigation.confidence} color={c}/>
+                  {rec.irrigation.water_amount_mm&&(
+                    <div style={{margin:"14px 0",padding:"14px",borderRadius:11,
+                      background:`${c}12`,border:`1px solid ${c}25`,textAlign:"center"}}>
+                      <div style={{fontFamily:F.mono,fontSize:38,fontWeight:600,color:c,
+                        lineHeight:1,letterSpacing:"-.03em"}}>
+                        {rec.irrigation.water_amount_mm}
+                        <span style={{fontSize:14,fontWeight:400,color:T.textMuted}}> mm</span>
                       </div>
-                    ))}
-                  </div>
-                )}
-                <div style={{ marginTop:12 }}>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>Top 3</div>
-                  {full.fertilizer.top_3_fertilizers?.map((f,i) => (
-                    <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${C.border}22` }}>
-                      <span style={{ color:C.textDim, fontSize:12 }}>
-                        {i===0?"🥇":i===1?"🥈":"🥉"} {f.label}
-                      </span>
-                      <span style={{ color:C.amber, fontSize:12 }}>{Math.round(f.probability*100)}%</span>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Recommended water</div>
+                    </div>
+                  )}
+                  <p style={{color:T.textSub,fontSize:13,lineHeight:1.7}}>{rec.irrigation.advice}</p>
+                </Card>
+              );
+            })()}
+            {rec.fertilizer&&(
+              <Card accent={T.amber}>
+                <CHead label="🧪 Fertilizer" color={T.amber} badge={rec.fertilizer.confidence_pct}/>
+                <div style={{fontFamily:F.display,fontSize:26,fontWeight:700,color:T.amber,
+                  letterSpacing:"-.02em",lineHeight:1.1,marginBottom:14}}>
+                  {rec.fertilizer.fertilizer}</div>
+                <ConfRow label="Model confidence" value={rec.fertilizer.confidence} color={T.amber}/>
+                <p style={{color:T.textSub,fontSize:13,lineHeight:1.7,margin:"12px 0 14px"}}>
+                  {rec.fertilizer.advice}</p>
+                {rec.fertilizer.npk_status&&(<>
+                  <Divider/>
+                  <div style={{fontSize:10,color:T.textDim,marginBottom:8,fontWeight:700,
+                    textTransform:"uppercase",letterSpacing:".07em"}}>NPK Status</div>
+                  {Object.entries(rec.fertilizer.npk_status).map(([k,v])=>(
+                    <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"5px 0"}}>
+                      <span style={{color:T.textSub,fontSize:13,textTransform:"capitalize"}}>{k}</span>
+                      <Badge text={v} color={v==="optimal"?T.accent:v==="low"?T.rose:T.amber}/>
                     </div>
                   ))}
-                </div>
+                </>)}
+                <Divider/>
+                <div style={{fontSize:10,color:T.textDim,marginBottom:8,fontWeight:700,
+                  textTransform:"uppercase",letterSpacing:".07em"}}>Top 3</div>
+                {rec.fertilizer.top_3_fertilizers?.map((f,i)=>
+                  <TopM key={i} rank={i} label={f.label}
+                    pct={Math.round(f.probability*100)} color={T.amber}/>)}
               </Card>
             )}
           </div>
-
-          {/* Data used */}
-          {(full.sensor_data_used || full.weather_data_used) && (
-            <Card style={{ marginBottom:20 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:12 }}>
-                📊 Data Used for This Recommendation
-              </div>
-              <div style={{ display:"flex", gap:24, flexWrap:"wrap" }}>
-                {full.sensor_data_used && Object.entries(full.sensor_data_used).map(([k,v]) => (
+          {(rec.sensor_data_used||rec.weather_data_used)&&(
+            <Card style={{marginBottom:14}}>
+              <div style={{fontWeight:600,fontSize:14,color:T.text,marginBottom:12,
+                letterSpacing:"-.01em"}}>Data Used for This Recommendation</div>
+              <div style={{display:"flex",gap:28,flexWrap:"wrap"}}>
+                {rec.sensor_data_used&&Object.entries(rec.sensor_data_used).map(([k,v])=>(
                   <div key={k}>
-                    <div style={{ fontSize:11, color:C.muted }}>{k.replace(/_/g," ")}</div>
-                    <div style={{ fontSize:15, color:C.green, fontWeight:600 }}>{fmt(v,2)}</div>
+                    <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>
+                      {k.replace(/_/g," ")}</div>
+                    <div style={{fontSize:16,fontWeight:700,color:T.accent,fontFamily:F.mono}}>
+                      {fmt(v,2)}</div>
                   </div>
                 ))}
-                {full.weather_data_used && (
-                  <>
-                    <div>
-                      <div style={{ fontSize:11, color:C.muted }}>weather temp</div>
-                      <div style={{ fontSize:15, color:C.teal, fontWeight:600 }}>{fmt(full.weather_data_used.temperature_c,1)}°C</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize:11, color:C.muted }}>rainfall est.</div>
-                      <div style={{ fontSize:15, color:C.teal, fontWeight:600 }}>{fmt(full.weather_data_used.rainfall_monthly_mm,0)}mm</div>
-                    </div>
-                  </>
-                )}
+                {rec.weather_data_used&&<>
+                  <div><div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>weather temp</div>
+                    <div style={{fontSize:16,fontWeight:700,color:T.teal,fontFamily:F.mono}}>
+                      {fmt(rec.weather_data_used.temperature_c,1)}°C</div></div>
+                  <div><div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>est. rainfall</div>
+                    <div style={{fontSize:16,fontWeight:700,color:T.teal,fontFamily:F.mono}}>
+                      {fmt(rec.weather_data_used.rainfall_monthly_mm,0)}mm</div></div>
+                </>}
               </div>
             </Card>
           )}
         </>
       )}
-
-      {/* Manual Crop Tool */}
-      <Card>
-        <SectionTitle icon="🔬" title="Custom Crop Advisor" sub="Enter your soil NPK values manually for a tailored recommendation"/>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:16 }}>
-          {[
-            { key:"nitrogen",   label:"Nitrogen (N)",   min:0, max:200 },
-            { key:"phosphorus", label:"Phosphorus (P)", min:0, max:200 },
-            { key:"potassium",  label:"Potassium (K)",  min:0, max:200 },
-            { key:"ph",         label:"Soil pH",        min:0, max:14  },
-          ].map(f => (
+      <Card accent={T.violet}>
+        <div style={{marginBottom:18}}>
+          <div style={{fontFamily:F.display,fontWeight:700,fontSize:16,color:T.text,
+            marginBottom:4,letterSpacing:"-.01em"}}>🔬 Custom Crop Advisor</div>
+          <div style={{fontSize:13,color:T.textMuted}}>
+            Enter soil NPK values manually for a tailored recommendation</div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
+          {[{key:"nitrogen",label:"Nitrogen (N)",max:200},
+            {key:"phosphorus",label:"Phosphorus (P)",max:200},
+            {key:"potassium",label:"Potassium (K)",max:200},
+            {key:"ph",label:"Soil pH",max:14}].map(f=>(
             <div key={f.key}>
-              <label style={{ fontSize:12, color:C.muted, display:"block", marginBottom:6 }}>{f.label}</label>
-              <input
-                type="number" min={f.min} max={f.max} step="0.1"
-                value={cropForm[f.key]}
-                onChange={e => setCropForm(p => ({...p, [f.key]: parseFloat(e.target.value)}))}
-                style={{
-                  width:"100%", padding:"9px 12px", borderRadius:8, boxSizing:"border-box",
-                  background:C.surface, border:`1px solid ${C.border}`,
-                  color:C.text, fontSize:15, outline:"none",
-                }}
-              />
+              <label style={{fontSize:12,color:T.textMuted,display:"block",
+                marginBottom:6,fontWeight:500}}>{f.label}</label>
+              <input type="number" min={0} max={f.max} step="0.1"
+                value={form[f.key]}
+                onChange={e=>setForm(p=>({...p,[f.key]:parseFloat(e.target.value)||0}))}
+                style={{width:"100%",padding:"9px 12px",borderRadius:9,boxSizing:"border-box",
+                  background:T.surface,border:`1px solid ${T.border}`,color:T.text,
+                  fontSize:14,outline:"none",fontFamily:F.mono,
+                  transition:"border-color .2s,box-shadow .2s"}}
+                onFocus={e=>{e.target.style.borderColor=T.violet;
+                  e.target.style.boxShadow=`0 0 0 3px ${T.violet}18`;}}
+                onBlur={e=>{e.target.style.borderColor=T.border;
+                  e.target.style.boxShadow="none";}}/>
             </div>
           ))}
         </div>
-        <button onClick={handleCropSubmit} disabled={cropLoading}
-          style={{
-            padding:"10px 24px", borderRadius:8,
-            background: cropLoading ? C.greenDim : C.green,
-            border:"none", color:"#0d1a12",
-            fontWeight:700, fontSize:14, cursor:"pointer",
-            transition:"all 0.2s"
-          }}>
-          {cropLoading ? "Analysing…" : "🌱 Get Crop Recommendation"}
+        <button onClick={runCustom} disabled={busy}
+          style={{padding:"10px 24px",borderRadius:9,
+            background:busy?T.surface:`${T.violet}20`,
+            border:`1px solid ${busy?T.border:T.violet+"50"}`,
+            color:busy?T.textMuted:T.violet,fontWeight:600,fontSize:14,
+            cursor:busy?"default":"pointer",fontFamily:F.body,transition:"all .2s"}}
+          onMouseEnter={e=>!busy&&(e.currentTarget.style.background=`${T.violet}30`)}
+          onMouseLeave={e=>!busy&&(e.currentTarget.style.background=`${T.violet}20`)}>
+          {busy?"⟳ Analysing…":"🌱 Get Crop Recommendation"}
         </button>
-
-        {cropResult && (
-          <div style={{ marginTop:16, padding:"16px", borderRadius:10, background:C.surface, border:`1px solid ${C.greenDim}` }}>
-            <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>RESULT</div>
-            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:24, fontWeight:700, color:C.green, textTransform:"capitalize" }}>
-              {cropResult.crop}
-            </div>
-            <div style={{ margin:"8px 0" }}><ConfidenceBar value={cropResult.confidence} color={C.green}/></div>
-            <p style={{ color:C.textDim, fontSize:13, margin:"8px 0 0" }}>{cropResult.advice}</p>
+        {custom&&(
+          <div style={{marginTop:16,padding:"16px",borderRadius:11,
+            background:T.accentSubtle,border:`1px solid ${T.accent}30`}}>
+            <div style={{fontSize:10,color:T.accent,textTransform:"uppercase",
+              letterSpacing:".08em",fontWeight:700,marginBottom:8}}>Result</div>
+            <div style={{fontFamily:F.display,fontSize:22,fontWeight:700,color:T.accent,
+              textTransform:"capitalize",letterSpacing:"-.01em",marginBottom:10}}>
+              {custom.crop}</div>
+            <ConfRow label="Confidence" value={custom.confidence} color={T.accent}/>
+            {custom.advice&&
+              <p style={{color:T.textSub,fontSize:13,lineHeight:1.7,marginTop:8}}>
+                {custom.advice}</p>}
           </div>
         )}
       </Card>
@@ -824,243 +829,208 @@ function RecommendPage() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// PAGE: ANALYTICS
-// ─────────────────────────────────────────────────────────────
-function AnalyticsPage() {
-  const { data: weekly, loading } =
-    useFetch(useCallback(() => getWeeklySummary(), []));
-
-  const summaries = weekly?.summaries || [];
-
-  const tempData     = summaries.map(s => ({ date:s.date?.slice(5), avg:s.temperature?.avg, min:s.temperature?.min, max:s.temperature?.max }));
-  const humData      = summaries.map(s => ({ date:s.date?.slice(5), avg:s.humidity?.avg    }));
-  const moistureData = summaries.map(s => ({ date:s.date?.slice(5), avg:s.soil_moisture?.avg }));
-  const phData       = summaries.map(s => ({ date:s.date?.slice(5), avg:s.ph?.avg          }));
-
-  return (
+// ── Analytics Page ────────────────────────────────────────────
+function AnalyticsPage(){
+  const {data:weekly,loading}=useFetch(useCallback(()=>getWeeklySummary(),[]));
+  const sums=weekly?.summaries||[];
+  const charts=[
+    {key:"temperature",  label:"Temperature (°C)",color:T.rose},
+    {key:"humidity",     label:"Humidity (%)",     color:T.blue},
+    {key:"soil_moisture",label:"Soil Moisture (%)",color:T.accent},
+    {key:"ph",           label:"Soil pH",          color:T.amber},
+  ];
+  return(
     <div>
-      <SectionTitle icon="📊" title="Weekly Analytics" sub="Daily min/avg/max aggregations from MongoDB — last 7 days"/>
-
-      {loading ? <Spinner/> : (
-        <>
-          {/* Summary stat cards */}
-          {summaries.length > 0 && (() => {
-            const latest = summaries[summaries.length-1];
-            return (
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
-                <Card>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>🌡️ TODAY AVG TEMP</div>
-                  <div style={{ fontFamily:"'Playfair Display',serif", fontSize:28, color:C.rose, fontWeight:700 }}>
-                    {fmt(latest.temperature?.avg)}°C
-                  </div>
-                  <div style={{ fontSize:12, color:C.muted, marginTop:4 }}>
-                    {fmt(latest.temperature?.min)}° – {fmt(latest.temperature?.max)}°
-                  </div>
-                </Card>
-                <Card>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>💧 TODAY AVG HUMIDITY</div>
-                  <div style={{ fontFamily:"'Playfair Display',serif", fontSize:28, color:C.teal, fontWeight:700 }}>
-                    {fmt(latest.humidity?.avg)}%
-                  </div>
-                  <div style={{ fontSize:12, color:C.muted, marginTop:4 }}>
-                    {fmt(latest.humidity?.min)}% – {fmt(latest.humidity?.max)}%
-                  </div>
-                </Card>
-                <Card>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>🌱 TODAY AVG MOISTURE</div>
-                  <div style={{ fontFamily:"'Playfair Display',serif", fontSize:28, color:C.green, fontWeight:700 }}>
-                    {fmt(latest.soil_moisture?.avg)}%
-                  </div>
-                  <div style={{ fontSize:12, color:C.muted, marginTop:4 }}>
-                    {fmt(latest.soil_moisture?.min)}% – {fmt(latest.soil_moisture?.max)}%
-                  </div>
-                </Card>
-                <Card>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>⚗️ TODAY AVG pH</div>
-                  <div style={{ fontFamily:"'Playfair Display',serif", fontSize:28, color:C.amber, fontWeight:700 }}>
-                    {fmt(latest.ph?.avg)}
-                  </div>
-                  <div style={{ fontSize:12, color:C.muted, marginTop:4 }}>
-                    {fmt(latest.ph?.min)} – {fmt(latest.ph?.max)}
-                  </div>
-                </Card>
-              </div>
-            );
-          })()}
-
-          {/* Weekly charts */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+      <SHead title="Weekly Analytics" sub="Daily min/avg/max from MongoDB Atlas — last 7 days"/>
+      {loading?(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:18}}>
+          {[0,1,2,3].map(i=><Skeleton key={i} height={100}/>)}
+        </div>
+      ):sums.length>0&&(()=>{
+        const l=sums[sums.length-1];
+        return(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:18}}>
             {[
-              { data:tempData,     key:"avg", label:"Temperature (°C)",   color:C.rose  },
-              { data:humData,      key:"avg", label:"Humidity (%)",        color:C.teal  },
-              { data:moistureData, key:"avg", label:"Soil Moisture (%)",   color:C.green },
-              { data:phData,       key:"avg", label:"Soil pH",             color:C.amber },
-            ].map((c, i) => (
-              <Card key={i}>
-                <div style={{ marginBottom:12, fontSize:14, fontWeight:600, color:C.text }}>
-                  {c.label} — 7-Day Average
-                </div>
-                <ResponsiveContainer width="100%" height={160}>
-                  <AreaChart data={c.data}>
-                    <defs>
-                      <linearGradient id={`g${i}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={c.color} stopOpacity={0.35}/>
-                        <stop offset="95%" stopColor={c.color} stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                    <XAxis dataKey="date" tick={{ fill:C.muted, fontSize:10 }}/>
-                    <YAxis tick={{ fill:C.muted, fontSize:10 }}/>
-                    <Tooltip contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6 }} itemStyle={{ color:c.color }} labelStyle={{ color:C.text }}/>
-                    <Area type="monotone" dataKey={c.key} name={c.label} stroke={c.color} fill={`url(#g${i})`} strokeWidth={2} dot={{ fill:c.color, r:3 }}/>
-                  </AreaChart>
-                </ResponsiveContainer>
+              {label:"Today Avg Temp",   v:`${fmt(l.temperature?.avg)}°C`,
+               lo:`${fmt(l.temperature?.min)}°`,hi:`${fmt(l.temperature?.max)}°`,color:T.rose},
+              {label:"Humidity Avg",     v:`${fmt(l.humidity?.avg)}%`,
+               lo:`${fmt(l.humidity?.min)}%`,  hi:`${fmt(l.humidity?.max)}%`,    color:T.blue},
+              {label:"Soil Moisture Avg",v:`${fmt(l.soil_moisture?.avg)}%`,
+               lo:`${fmt(l.soil_moisture?.min)}%`,hi:`${fmt(l.soil_moisture?.max)}%`,color:T.accent},
+              {label:"Average pH",       v:`${fmt(l.ph?.avg,2)}`,
+               lo:`${fmt(l.ph?.min,2)}`,hi:`${fmt(l.ph?.max,2)}`,             color:T.amber},
+            ].map((s,i)=>(
+              <Card key={i} accent={s.color}>
+                <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",
+                  letterSpacing:".06em",fontWeight:600,marginBottom:8}}>{s.label}</div>
+                <div style={{fontFamily:F.mono,fontSize:28,fontWeight:600,color:s.color,
+                  letterSpacing:"-.02em"}}>{s.v}</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{s.lo} — {s.hi} range</div>
               </Card>
             ))}
           </div>
-
-          {/* Weekly table */}
-          <Card style={{ marginTop:16 }}>
-            <div style={{ marginBottom:14, fontSize:14, fontWeight:600, color:C.text }}>
-              📋 7-Day Summary Table
-            </div>
-            <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-                <thead>
-                  <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-                    {["Date","Readings","Temp avg","Humidity avg","Moisture avg","pH avg"].map(h => (
-                      <th key={h} style={{ padding:"8px 12px", textAlign:"left", color:C.muted, fontWeight:500, fontSize:11 }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {summaries.map((s,i) => (
-                    <tr key={i} style={{ borderBottom:`1px solid ${C.border}22` }}>
-                      <td style={{ padding:"9px 12px", color:C.text, fontWeight:500 }}>{s.date}</td>
-                      <td style={{ padding:"9px 12px", color:C.muted }}>{s.total_readings}</td>
-                      <td style={{ padding:"9px 12px", color:C.rose  }}>{fmt(s.temperature?.avg)}°C</td>
-                      <td style={{ padding:"9px 12px", color:C.teal  }}>{fmt(s.humidity?.avg)}%</td>
-                      <td style={{ padding:"9px 12px", color:C.green }}>{fmt(s.soil_moisture?.avg)}%</td>
-                      <td style={{ padding:"9px 12px", color:C.amber }}>{fmt(s.ph?.avg)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </>
-      )}
+        );
+      })()}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        {charts.map((c,idx)=>{
+          const data=sums.map(s=>({date:(s.date||"").slice(5),avg:s[c.key]?.avg}));
+          return(
+            <Card key={idx}>
+              <div style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontFamily:F.display,fontWeight:600,fontSize:14,
+                  color:T.text,letterSpacing:"-.01em"}}>{c.label}</div>
+                <Badge text="7-day" color={c.color}/>
+              </div>
+              <ResponsiveContainer width="100%" height={150}>
+                <AreaChart data={data} margin={{top:4,right:4,bottom:0,left:-28}}>
+                  <defs>
+                    <linearGradient id={`ga${idx}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={c.color} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={c.color} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false}/>
+                  <XAxis dataKey="date" tick={{fill:T.textDim,fontSize:10}}
+                    axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fill:T.textDim,fontSize:10}}
+                    axisLine={false} tickLine={false}/>
+                  <Tooltip content={<ChartTip/>}/>
+                  <Area type="monotone" dataKey="avg" name={c.label}
+                    stroke={c.color} fill={`url(#ga${idx})`} strokeWidth={2}
+                    dot={{fill:c.color,r:3,strokeWidth:0}}
+                    activeDot={{r:5,fill:c.color,stroke:T.card,strokeWidth:2}}/>
+                </AreaChart>
+              </ResponsiveContainer>
+            </Card>
+          );
+        })}
+      </div>
+      <Card>
+        <div style={{fontFamily:F.display,fontWeight:600,fontSize:15,color:T.text,
+          marginBottom:14,letterSpacing:"-.01em"}}>7-Day Summary Table</div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead><tr>
+              {["Date","Readings","Temp avg","Humidity avg","Moisture avg","pH avg"].map(h=>(
+                <th key={h} style={{padding:"8px 14px",textAlign:"left",color:T.textDim,
+                  fontWeight:600,fontSize:10,textTransform:"uppercase",letterSpacing:".06em",
+                  borderBottom:`1px solid ${T.border}`}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {sums.map((s,i)=>(
+                <tr key={i} style={{borderBottom:`1px solid ${T.border}18`,transition:"background .15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=`${T.accent}06`}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <td style={{padding:"9px 14px",color:T.text,fontWeight:500,fontFamily:F.mono}}>{s.date}</td>
+                  <td style={{padding:"9px 14px",color:T.textMuted,fontFamily:F.mono}}>{s.total_readings}</td>
+                  <td style={{padding:"9px 14px",color:T.rose,  fontFamily:F.mono}}>{fmt(s.temperature?.avg)}°C</td>
+                  <td style={{padding:"9px 14px",color:T.blue,  fontFamily:F.mono}}>{fmt(s.humidity?.avg)}%</td>
+                  <td style={{padding:"9px 14px",color:T.accent,fontFamily:F.mono}}>{fmt(s.soil_moisture?.avg)}%</td>
+                  <td style={{padding:"9px 14px",color:T.amber, fontFamily:F.mono}}>{fmt(s.ph?.avg,2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {sums.length===0&&<div style={{padding:"28px 14px",textAlign:"center",
+            color:T.textMuted,fontSize:13}}>
+            No weekly data yet — data accumulates as sensors collect readings</div>}
+        </div>
+      </Card>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// PAGE: WEATHER
-// ─────────────────────────────────────────────────────────────
-function WeatherPage() {
-  const { data: w, loading, error } =
-    usePolling(useCallback(() => getCurrentWeather(), []), 300000);
-
-  const weatherIcon = (main) => ({
-    Rain:"🌧️", Drizzle:"🌦️", Thunderstorm:"⛈️",
-    Snow:"❄️", Clear:"☀️", Clouds:"☁️",
-    Mist:"🌫️", Haze:"🌫️", Fog:"🌁",
-  }[main] || "🌤️");
-
-  return (
+// ── Weather Page ──────────────────────────────────────────────
+function WeatherPage(){
+  const {data:w,loading,error}=
+    usePolling(useCallback(()=>getCurrentWeather(),[]),300000);
+  const wIcon=c=>({Clear:"☀️",Clouds:"☁️",Rain:"🌧️",Drizzle:"🌦️",
+    Thunderstorm:"⛈️",Mist:"🌫️",Haze:"🌫️",Fog:"🌁"}[c]||"🌤️");
+  return(
     <div>
-      <SectionTitle icon="🌦️" title="Weather Conditions" sub={`Live data for ${w?.city || "your city"} — cached 10 minutes`}/>
-
-      {error && <ErrorBanner msg={error}/>}
-      {loading && !w ? <Spinner/> : w ? (
+      <SHead title="Weather Conditions"
+        sub={`Live data for ${w?.city||"your city"} · refreshes every 5 minutes`}/>
+      <Err msg={error}/>
+      {loading&&!w?<Skeleton height={200}/>:w?(
         <>
-          {/* Hero card */}
-          <Card style={{ marginBottom:20, background:"linear-gradient(135deg,#1a2d20,#0f2318)" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <Card style={{marginBottom:14,background:`linear-gradient(135deg,${T.card},${T.overlay})`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
-                <div style={{ fontSize:60 }}>{weatherIcon(w.condition_main)}</div>
-                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:52, fontWeight:700, color:C.text, lineHeight:1 }}>
-                  {fmt(w.temperature_c)}°C
-                </div>
-                <div style={{ fontSize:16, color:C.muted, marginTop:6, textTransform:"capitalize" }}>
-                  {w.condition_desc}
-                </div>
-                <div style={{ fontSize:14, color:C.textDim, marginTop:4 }}>
-                  {w.city}, {w.country} · Feels like {fmt(w.feels_like_c)}°C
-                </div>
+                <div style={{fontSize:58,marginBottom:12,
+                  filter:"drop-shadow(0 4px 12px rgba(0,0,0,.5))"}}>{wIcon(w.condition_main)}</div>
+                <div style={{fontFamily:F.mono,fontSize:52,fontWeight:600,color:T.text,
+                  lineHeight:1,letterSpacing:"-.04em"}}>{fmt(w.temperature_c)}°C</div>
+                <div style={{fontSize:16,color:T.textSub,marginTop:8,textTransform:"capitalize"}}>
+                  {w.condition_desc}</div>
+                <div style={{fontSize:13,color:T.textMuted,marginTop:4}}>
+                  {w.city}, {w.country} · Feels like {fmt(w.feels_like_c)}°C</div>
               </div>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ color:C.muted, fontSize:12, marginBottom:4 }}>RANGE TODAY</div>
-                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:C.rose }}>
-                  {fmt(w.temp_max_c)}°
+              <div style={{textAlign:"right"}}>
+                <div style={{marginBottom:18}}>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:4,
+                    textTransform:"uppercase",letterSpacing:".06em"}}>High</div>
+                  <div style={{fontFamily:F.mono,fontSize:26,fontWeight:600,color:T.rose}}>
+                    {fmt(w.temp_max_c)}°</div>
                 </div>
-                <div style={{ color:C.muted, fontSize:13 }}>High</div>
-                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:C.teal, marginTop:8 }}>
-                  {fmt(w.temp_min_c)}°
+                <div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:4,
+                    textTransform:"uppercase",letterSpacing:".06em"}}>Low</div>
+                  <div style={{fontFamily:F.mono,fontSize:26,fontWeight:600,color:T.blue}}>
+                    {fmt(w.temp_min_c)}°</div>
                 </div>
-                <div style={{ color:C.muted, fontSize:13 }}>Low</div>
               </div>
             </div>
           </Card>
-
-          {/* Detail grid */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:16 }}>
-            <StatPill label="Humidity"       value={fmt(w.humidity_pct,0)}    unit="%"    color={C.teal}  icon="💧"/>
-            <StatPill label="Wind Speed"     value={fmt(w.wind_speed_ms,1)}   unit="m/s"  color={C.green} icon="💨"/>
-            <StatPill label="Pressure"       value={fmt(w.pressure_hpa,0)}    unit="hPa"  color={C.amber} icon="🔵"/>
-            <StatPill label="Cloud Cover"    value={w.cloudiness_pct}         unit="%"    color={C.textDim} icon="☁️"/>
-            <StatPill label="Rain (1h)"      value={fmt(w.rainfall_1h_mm,1)}  unit="mm"   color={C.teal}  icon="🌧️"/>
-            <StatPill label="Rain Est./mo"   value={fmt(w.rainfall_monthly_mm,0)} unit="mm" color={C.rose} icon="📅"/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:14}}>
+            <Metric label="Humidity"     value={w.humidity_pct}       decimals={0} unit="%"   color={T.blue}    icon="💧"/>
+            <Metric label="Wind Speed"   value={w.wind_speed_ms}      decimals={1} unit="m/s" color={T.accent}  icon="💨"/>
+            <Metric label="Pressure"     value={w.pressure_hpa}       decimals={0} unit="hPa" color={T.textSub} icon="🔵"/>
+            <Metric label="Cloud Cover"  value={w.cloudiness_pct}     decimals={0} unit="%"   color={T.textSub} icon="☁️"/>
+            <Metric label="Rain (1h)"    value={w.rainfall_1h_mm}     decimals={1} unit="mm"  color={T.teal}    icon="🌧️"/>
+            <Metric label="Monthly Est." value={w.rainfall_monthly_mm} decimals={0} unit="mm" color={T.rose}    icon="📅"/>
           </div>
-
-          {/* Agriculture impact */}
           <Card>
-            <div style={{ marginBottom:14, fontSize:14, fontWeight:600, color:C.text }}>
-              🌿 Agricultural Impact Assessment
-            </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {[
-                {
-                  label:"Irrigation Need",
-                  value: w.rainfall_3h_mm > 5 ? "Low — recent rainfall sufficient" :
-                         w.humidity_pct > 80  ? "Moderate — high humidity" : "High — dry conditions",
-                  color: w.rainfall_3h_mm > 5 ? C.green : w.humidity_pct > 80 ? C.amber : C.rose
-                },
-                {
-                  label:"Crop Growth Conditions",
-                  value: w.temperature_c > 35 ? "Heat stress risk — monitor sensitive crops" :
-                         w.temperature_c < 10 ? "Cold stress risk — protect crops" :
-                         "Favourable temperature range",
-                  color: (w.temperature_c > 35 || w.temperature_c < 10) ? C.rose : C.green
-                },
-                {
-                  label:"Disease Risk",
-                  value: w.humidity_pct > 85 ? "High humidity — fungal disease risk elevated" :
-                         "Normal — maintain regular monitoring",
-                  color: w.humidity_pct > 85 ? C.amber : C.green
-                }
-              ].map((item,i) => (
-                <div key={i} style={{
-                  display:"flex", justifyContent:"space-between", alignItems:"center",
-                  padding:"11px 14px", borderRadius:8,
-                  background:C.surface, border:`1px solid ${C.border}`
-                }}>
-                  <span style={{ color:C.textDim, fontSize:13 }}>{item.label}</span>
-                  <span style={{ color:item.color, fontSize:13, fontWeight:500 }}>{item.value}</span>
-                </div>
-              ))}
-            </div>
+            <div style={{fontFamily:F.display,fontWeight:600,fontSize:15,color:T.text,
+              marginBottom:14,letterSpacing:"-.01em"}}>🌿 Agricultural Impact Assessment</div>
+            {[
+              {label:"Irrigation Need",
+               value:w.rainfall_3h_mm>5?"Low — recent rainfall sufficient":
+                     w.humidity_pct>80?"Moderate — high humidity":"High — dry conditions",
+               color:w.rainfall_3h_mm>5?T.accent:w.humidity_pct>80?T.amber:T.rose},
+              {label:"Crop Stress Risk",
+               value:w.temperature_c>35?"Heat stress — monitor crops":
+                     w.temperature_c<10?"Cold stress — protect from frost":
+                     "Optimal temperature range",
+               color:(w.temperature_c>35||w.temperature_c<10)?T.rose:T.accent},
+              {label:"Disease Risk",
+               value:w.humidity_pct>85?"Elevated — fungal disease risk":
+                     "Low — routine monitoring",
+               color:w.humidity_pct>85?T.amber:T.accent},
+            ].map((item,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",
+                alignItems:"center",padding:"12px 14px",borderRadius:10,marginBottom:8,
+                background:T.surface,border:`1px solid ${T.border}`,
+                transition:"border-color .2s,background .2s",cursor:"default"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=item.color+"45";
+                  e.currentTarget.style.background=T.card;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;
+                  e.currentTarget.style.background=T.surface;}}>
+                <span style={{color:T.textSub,fontSize:13,fontWeight:500}}>{item.label}</span>
+                <span style={{color:item.color,fontSize:13,fontWeight:600}}>{item.value}</span>
+              </div>
+            ))}
           </Card>
         </>
-      ) : (
+      ):(
         <Card>
-          <div style={{ textAlign:"center", padding:40, color:C.muted }}>
-            <div style={{ fontSize:40, marginBottom:12 }}>🌦️</div>
-            <div style={{ fontSize:16, color:C.text, marginBottom:8 }}>Weather API Not Configured</div>
-            <div style={{ fontSize:13 }}>Add <code style={{ color:C.green }}>WEATHER_API_KEY</code> to your .env file</div>
+          <div style={{textAlign:"center",padding:52}}>
+            <div style={{fontSize:52,marginBottom:14}}>🌦️</div>
+            <div style={{fontFamily:F.display,fontSize:18,fontWeight:600,
+              color:T.text,marginBottom:8}}>Weather API Not Configured</div>
+            <div style={{fontSize:13,color:T.textMuted,lineHeight:1.7}}>
+              Add <code style={{background:T.surface,padding:"2px 7px",borderRadius:6,
+                color:T.accent,fontSize:12}}>WEATHER_API_KEY</code> to your .env file</div>
           </div>
         </Card>
       )}
@@ -1068,50 +1038,60 @@ function WeatherPage() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// ROOT APP
-// ─────────────────────────────────────────────────────────────
-export default function App() {
-  const [page, setPage] = useState("dashboard");
-  const { data: status } = usePolling(useCallback(() => {
-    return fetch("http://localhost:8000/health").then(r => r.json()).catch(() => null);
-  }, []), 30000);
+// ── Root ──────────────────────────────────────────────────────
+export default function App(){
+  const [page,setPage]=useState("overview");
+  const {data:health}=usePolling(useCallback(()=>
+    fetch("http://localhost:8000/health").then(r=>r.json()).catch(()=>null)
+  ,[]),30000);
 
-  const pages = {
-    dashboard: <DashboardPage/>,
-    sensors:   <SensorsPage/>,
-    recommend: <RecommendPage/>,
-    analytics: <AnalyticsPage/>,
-    weather:   <WeatherPage/>,
+  const PAGES={
+    overview:<OverviewPage/>,sensors:<SensorsPage/>,
+    ai:<AIPage/>,analytics:<AnalyticsPage/>,weather:<WeatherPage/>,
   };
 
-  return (
+  return(
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
-        * { box-sizing:border-box; margin:0; padding:0; }
-        body { background:${C.bg}; color:${C.text}; font-family:'DM Sans',sans-serif; }
-        ::-webkit-scrollbar { width:6px; }
-        ::-webkit-scrollbar-track { background:${C.surface}; }
-        ::-webkit-scrollbar-thumb { background:${C.border}; border-radius:3px; }
-        @keyframes pulse {
-          0%   { box-shadow:0 0 0 0 ${C.green}88; }
-          70%  { box-shadow:0 0 0 8px ${C.green}00; }
-          100% { box-shadow:0 0 0 0 ${C.green}00; }
+        @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600;700&display=swap');
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        html{font-size:16px;-webkit-font-smoothing:antialiased;
+          -moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+        body{background:${T.bg};color:${T.text};font-family:${F.body};line-height:1.5}
+        ::-webkit-scrollbar{width:4px;height:4px}
+        ::-webkit-scrollbar-track{background:${T.surface}}
+        ::-webkit-scrollbar-thumb{background:${T.border};border-radius:2px}
+        ::-webkit-scrollbar-thumb:hover{background:${T.borderLight}}
+        input,button{font-family:${F.body}}
+        input:focus{outline:none}
+        @keyframes pulseDot{
+          0%  {box-shadow:0 0 0 0 ${T.accent}80}
+          70% {box-shadow:0 0 0 6px ${T.accent}00}
+          100%{box-shadow:0 0 0 0 ${T.accent}00}
         }
-        @keyframes spin { to { transform:rotate(360deg); } }
-        input:focus { border-color:${C.green} !important; }
-        button:hover:not(:disabled) { opacity:0.9; transform:translateY(-1px); }
+        @keyframes shimmer{
+          0%  {background-position:-200% 0}
+          100%{background-position:200% 0}
+        }
+        @keyframes fadeSlide{
+          from{opacity:0;transform:translateY(8px)}
+          to  {opacity:1;transform:translateY(0)}
+        }
+        .page-enter{animation:fadeSlide .22s cubic-bezier(.4,0,.2,1) both}
+        main::before{
+          content:"";position:fixed;inset:0;
+          background-image:radial-gradient(${T.border} 1px,transparent 1px);
+          background-size:28px 28px;opacity:.3;pointer-events:none;z-index:0;
+        }
+        main>*{position:relative;z-index:1}
       `}</style>
-
-      <div style={{ display:"flex", minHeight:"100vh" }}>
-        <Sidebar active={page} onNav={setPage} status={status}/>
-
-        <main style={{
-          flex:1, padding:"32px 36px",
-          overflowY:"auto", maxHeight:"100vh"
-        }}>
-          {pages[page] || <DashboardPage/>}
+      <div style={{display:"flex",minHeight:"100vh"}}>
+        <Sidebar page={page} setPage={setPage} health={health}/>
+        <main style={{flex:1,padding:"30px 34px",overflowY:"auto",
+          maxHeight:"100vh",background:T.bg,position:"relative"}}>
+          <div className="page-enter" key={page}>
+            {PAGES[page]||<OverviewPage/>}
+          </div>
         </main>
       </div>
     </>
