@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     APP_PORT:    int  = 8000
     APP_DEBUG:   bool = True
     APP_TITLE:   str  = "Smart Agriculture API"
-    APP_VERSION: str  = "1.0.0"
+    APP_VERSION: str  = "2.0.0"
 
     # ── MQTT ──────────────────────────────────────────────────
     MQTT_BROKER_HOST:       str = "localhost"
@@ -27,27 +27,39 @@ class Settings(BaseSettings):
     MQTT_TOPIC_SENSOR_DATA: str = "smart_agriculture/sensor_data"
     MQTT_CLIENT_ID:         str = "fastapi_backend_01"
 
-    # ── MongoDB ───────────────────────────────────────────────
-    MONGO_URI:                 str = "mongodb://localhost:27017"
-    MONGO_DB_NAME:             str = "smart_agriculture"
-    MONGO_COLLECTION_READINGS: str = "sensor_readings"
-    MONGO_COLLECTION_DAILY:    str = "daily_summaries"
+    # ── MongoDB Atlas ─────────────────────────────────────────
+    # Local fallback:  mongodb://localhost:27017
+    # Atlas format:    mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+    MONGO_URI:             str = "mongodb://localhost:27017"
+    MONGO_DB_NAME:         str = "agrisense"          # clean production name
+
+    # ── Collection names (schema-organised) ──────────────────
+    # Each collection name follows the pattern: <domain>_<entity>
+    MONGO_COL_SENSOR_READINGS:   str = "sensor_readings"   # raw IoT telemetry
+    MONGO_COL_DAILY_SUMMARIES:   str = "daily_summaries"   # pre-aggregated stats
+    MONGO_COL_RECOMMENDATIONS:   str = "recommendations"   # ML prediction history
+    MONGO_COL_DEVICES:           str = "devices"           # registered ESP32 devices
+    MONGO_COL_ALERTS:            str = "alerts"            # threshold breach alerts
+
+    # ── Legacy aliases (keep for backwards compatibility) ─────
+    @property
+    def MONGO_COLLECTION_READINGS(self) -> str:
+        return self.MONGO_COL_SENSOR_READINGS
+
+    @property
+    def MONGO_COLLECTION_DAILY(self) -> str:
+        return self.MONGO_COL_DAILY_SUMMARIES
 
     # ── Weather API (OpenWeatherMap) ──────────────────────────
-    WEATHER_API_KEY:      str   = ""
-    WEATHER_CITY:         str   = "Mahendranagar"
-    WEATHER_COUNTRY_CODE: str   = "NP"          # Nepal
-    WEATHER_CACHE_TTL:    int   = 600            # seconds — re-fetch every 10 min
+    WEATHER_API_KEY:      str = ""
+    WEATHER_CITY:         str = "Mahendranagar"
+    WEATHER_COUNTRY_CODE: str = "NP"
+    WEATHER_CACHE_TTL:    int = 600
 
     # ── Machine Learning ──────────────────────────────────────
-    ML_MODELS_DIR:        str   = "ml/saved_models"
-    ML_DATASETS_DIR:      str   = "ml/datasets"
-    ML_CROP_MODEL_FILE:   str   = "crop_recommendation_model.joblib"
-    ML_FERT_MODEL_FILE:   str   = "fertilizer_recommendation_model.joblib"
-    ML_IRRIG_MODEL_FILE:  str   = "irrigation_recommendation_model.joblib"
-    ML_ENCODER_FILE:      str   = "label_encoders.joblib"
-    ML_SCALER_FILE:       str   = "feature_scaler.joblib"
-    ML_MIN_CONFIDENCE:    float = 0.45           # minimum probability to show recommendation
+    ML_MODELS_DIR:       str   = "ml/saved_models"
+    ML_DATASETS_DIR:     str   = "ml/datasets"
+    ML_MIN_CONFIDENCE:   float = 0.45
 
 
 # Single instance imported everywhere

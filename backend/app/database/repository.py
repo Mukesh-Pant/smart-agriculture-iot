@@ -1,14 +1,11 @@
 # =============================================================
-# app/database/repository.py — Sensor Data Repository
+# app/database/repository.py — Data Repository Layer
 #
-# The Repository Pattern separates database logic from business
-# logic. Routes and services never write raw MongoDB queries —
-# they call clean methods here instead.
-#
-# This makes the code:
-#   - Testable (easy to mock the repository in tests)
-#   - Maintainable (DB logic in one place)
-#   - Swappable (change DB without touching routes)
+# Additions in this upgrade:
+#   • RecommendationRepository — saves ML predictions to Atlas
+#   • AlertRepository          — logs threshold breach alerts
+#   • DeviceRepository         — registers / updates device info
+#   • SensorRepository         — unchanged API, new collection name
 # =============================================================
 
 import logging
@@ -17,7 +14,7 @@ from typing import Optional
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from pymongo import DESCENDING
+from pymongo import DESCENDING, ASCENDING
 
 from app.core.settings import settings
 from app.database.mongodb import get_database
@@ -27,298 +24,312 @@ logger = logging.getLogger(__name__)
 
 
 def _serialize(doc: dict) -> dict:
-    """
-    Converts MongoDB document to a clean Python dict.
-    Transforms ObjectId → string so Pydantic can handle it.
-    """
     if doc is None:
         return None
     doc["id"] = str(doc.pop("_id"))
     return doc
 
 
+# =============================================================
+# SENSOR REPOSITORY  (unchanged public API)
+# =============================================================
+
 class SensorRepository:
-    """
-    All database operations for the sensor_readings collection.
-    Every method is async — compatible with FastAPI's event loop.
-    """
 
     @property
-    def _collection(self):
-        """Returns the collection, or None if DB is unavailable."""
+    def _col(self):
         db = get_database()
-        if db is None:
-            return None
-        return db[settings.MONGO_COLLECTION_READINGS]
-
-    # ── WRITE ─────────────────────────────────────────────────
+        return db[settings.MONGO_COL_SENSOR_READINGS] if db else None
 
     async def save_reading(self, reading: SensorReadingResponse) -> Optional[str]:
-        """
-        Inserts one sensor reading document into MongoDB.
-
-        Args:
-            reading: Validated SensorReadingResponse object
-
-        Returns:
-            str: The inserted document's MongoDB _id as a string.
-            None: If MongoDB is unavailable (graceful degradation).
-        """
-        collection = self._collection
-        if collection is None:
-            logger.warning("[Repository] MongoDB unavailable — skipping DB save.")
+        if not self._col:
             return None
-
         try:
-            # Convert Pydantic model → dict, exclude None values
             doc = reading.model_dump(exclude_none=True)
-
-            # Remove our string id field — MongoDB generates its own _id
             doc.pop("id", None)
-
-            # Ensure received_at is a proper datetime object
             if isinstance(doc.get("received_at"), str):
                 doc["received_at"] = datetime.fromisoformat(doc["received_at"])
-
-            # Flatten nested sensor_status for easier querying
             if "sensor_status" in doc and doc["sensor_status"]:
                 doc["sensor_status"] = dict(doc["sensor_status"])
-
-            result = await collection.insert_one(doc)
+            result = await self._col.insert_one(doc)
             inserted_id = str(result.inserted_id)
+            logger.debug(f"[Repository] Saved reading → {inserted_id}")
 
-            logger.info(f"[Repository] Saved reading → _id: {inserted_id}")
+            # Also upsert device last_seen
+            await device_repository.update_last_seen(reading.device_id)
+
             return inserted_id
-
         except Exception as e:
-            logger.error(f"[Repository] Failed to save reading: {e}")
+            logger.error(f"[Repository] save_reading failed: {e}")
             return None
 
-    # ── READ ──────────────────────────────────────────────────
-
-    async def get_latest(
-        self,
-        device_id: Optional[str] = None
-    ) -> Optional[dict]:
-        """
-        Returns the single most recent reading.
-
-        Args:
-            device_id: If provided, filters to that device only.
-        """
-        collection = self._collection
-        if collection is None:
+    async def get_latest(self, device_id: Optional[str] = None) -> Optional[dict]:
+        if not self._col:
             return None
-
         try:
-            query = {"device_id": device_id} if device_id else {}
-            doc = await collection.find_one(
-                query,
-                sort=[("received_at", DESCENDING)]
-            )
+            q = {"device_id": device_id} if device_id else {}
+            doc = await self._col.find_one(q, sort=[("received_at", DESCENDING)])
             return _serialize(doc) if doc else None
-
         except Exception as e:
             logger.error(f"[Repository] get_latest failed: {e}")
             return None
 
-    async def get_history(
-        self,
-        limit:     int = 50,
-        skip:      int = 0,
-        device_id: Optional[str] = None,
-    ) -> list[dict]:
-        """
-        Returns paginated sensor readings, newest first.
-
-        Args:
-            limit:     Number of documents to return (max 500).
-            skip:      Number of documents to skip (for pagination).
-            device_id: Filter to a specific ESP32 device.
-        """
-        collection = self._collection
-        if collection is None:
+    async def get_history(self, limit=50, skip=0, device_id=None) -> list:
+        if not self._col:
             return []
-
         try:
-            limit = min(limit, 500)   # hard cap — prevent massive queries
-            query = {"device_id": device_id} if device_id else {}
-
-            cursor = collection.find(query) \
-                               .sort("received_at", DESCENDING) \
-                               .skip(skip) \
-                               .limit(limit)
-
-            docs = await cursor.to_list(length=limit)
-            return [_serialize(doc) for doc in docs]
-
+            q = {"device_id": device_id} if device_id else {}
+            cursor = self._col.find(q).sort("received_at", DESCENDING).skip(skip).limit(min(limit, 500))
+            docs = await cursor.to_list(length=min(limit, 500))
+            return [_serialize(d) for d in docs]
         except Exception as e:
             logger.error(f"[Repository] get_history failed: {e}")
             return []
 
     async def get_by_id(self, reading_id: str) -> Optional[dict]:
-        """Returns a single reading by its MongoDB _id string."""
-        collection = self._collection
-        if collection is None:
+        if not self._col:
             return None
-
         try:
-            doc = await collection.find_one({"_id": ObjectId(reading_id)})
+            doc = await self._col.find_one({"_id": ObjectId(reading_id)})
             return _serialize(doc) if doc else None
-        except InvalidId:
-            return None
-        except Exception as e:
+        except (InvalidId, Exception) as e:
             logger.error(f"[Repository] get_by_id failed: {e}")
             return None
 
-    async def get_range(
-        self,
-        start:     datetime,
-        end:       datetime,
-        device_id: Optional[str] = None,
-        limit:     int = 500
-    ) -> list[dict]:
-        """
-        Returns all readings between start and end datetimes.
-        Useful for daily/weekly analytics charts on the dashboard.
-        """
-        collection = self._collection
-        if collection is None:
+    async def get_range(self, start, end, device_id=None, limit=500) -> list:
+        if not self._col:
             return []
-
         try:
-            query: dict = {"received_at": {"$gte": start, "$lte": end}}
+            q = {"received_at": {"$gte": start, "$lte": end}}
             if device_id:
-                query["device_id"] = device_id
-
-            cursor = collection.find(query) \
-                               .sort("received_at", DESCENDING) \
-                               .limit(min(limit, 500))
-
+                q["device_id"] = device_id
+            cursor = self._col.find(q).sort("received_at", DESCENDING).limit(min(limit, 500))
             docs = await cursor.to_list(length=min(limit, 500))
-            return [_serialize(doc) for doc in docs]
-
+            return [_serialize(d) for d in docs]
         except Exception as e:
             logger.error(f"[Repository] get_range failed: {e}")
             return []
 
-    # ── AGGREGATION ───────────────────────────────────────────
-
-    async def get_daily_summary(
-        self,
-        date:      Optional[datetime] = None,
-        device_id: Optional[str] = None
-    ) -> Optional[dict]:
-        """
-        Calculates min/max/avg for all sensor values over a single day.
-        Uses MongoDB aggregation pipeline for server-side computation.
-
-        Args:
-            date:      The day to summarise (defaults to today UTC).
-            device_id: Filter to specific device.
-
-        Returns:
-            dict with avg/min/max for temperature, humidity, moisture, pH.
-        """
-        collection = self._collection
-        if collection is None:
+    async def get_daily_summary(self, date=None, device_id=None) -> Optional[dict]:
+        if not self._col:
             return None
-
         try:
             if date is None:
                 date = datetime.utcnow()
-
-            # Day boundaries
-            day_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_start = date.replace(hour=0,  minute=0,  second=0,  microsecond=0)
             day_end   = date.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-            match_stage: dict = {
-                "$match": {
-                    "received_at": {"$gte": day_start, "$lte": day_end}
-                }
-            }
+            match = {"$match": {"received_at": {"$gte": day_start, "$lte": day_end}}}
             if device_id:
-                match_stage["$match"]["device_id"] = device_id
+                match["$match"]["device_id"] = device_id
 
             pipeline = [
-                match_stage,
-                {
-                    "$group": {
-                        "_id": "$device_id",
-                        "total_readings": {"$sum": 1},
-
-                        "avg_temperature": {"$avg": "$temperature_c"},
-                        "min_temperature": {"$min": "$temperature_c"},
-                        "max_temperature": {"$max": "$temperature_c"},
-
-                        "avg_humidity":    {"$avg": "$humidity_pct"},
-                        "min_humidity":    {"$min": "$humidity_pct"},
-                        "max_humidity":    {"$max": "$humidity_pct"},
-
-                        "avg_moisture":    {"$avg": "$soil_moisture_pct"},
-                        "min_moisture":    {"$min": "$soil_moisture_pct"},
-                        "max_moisture":    {"$max": "$soil_moisture_pct"},
-
-                        "avg_ph":          {"$avg": "$ph_value"},
-                        "min_ph":          {"$min": "$ph_value"},
-                        "max_ph":          {"$max": "$ph_value"},
-
-                        "first_reading":   {"$min": "$received_at"},
-                        "last_reading":    {"$max": "$received_at"},
-                    }
-                },
-                {
-                    "$project": {
-                        "_id": 0,
-                        "device_id":      "$_id",
-                        "date":           day_start.strftime("%Y-%m-%d"),
-                        "total_readings": 1,
-
-                        "temperature": {
-                            "avg": {"$round": ["$avg_temperature", 2]},
-                            "min": {"$round": ["$min_temperature", 2]},
-                            "max": {"$round": ["$max_temperature", 2]},
-                        },
-                        "humidity": {
-                            "avg": {"$round": ["$avg_humidity", 2]},
-                            "min": {"$round": ["$min_humidity", 2]},
-                            "max": {"$round": ["$max_humidity", 2]},
-                        },
-                        "soil_moisture": {
-                            "avg": {"$round": ["$avg_moisture", 2]},
-                            "min": {"$round": ["$min_moisture", 2]},
-                            "max": {"$round": ["$max_moisture", 2]},
-                        },
-                        "ph": {
-                            "avg": {"$round": ["$avg_ph", 2]},
-                            "min": {"$round": ["$min_ph", 2]},
-                            "max": {"$round": ["$max_ph", 2]},
-                        },
-                        "first_reading": 1,
-                        "last_reading":  1,
-                    }
-                }
+                match,
+                {"$group": {
+                    "_id": "$device_id",
+                    "total_readings": {"$sum": 1},
+                    "avg_temperature": {"$avg": "$temperature_c"},
+                    "min_temperature": {"$min": "$temperature_c"},
+                    "max_temperature": {"$max": "$temperature_c"},
+                    "avg_humidity":    {"$avg": "$humidity_pct"},
+                    "min_humidity":    {"$min": "$humidity_pct"},
+                    "max_humidity":    {"$max": "$humidity_pct"},
+                    "avg_moisture":    {"$avg": "$soil_moisture_pct"},
+                    "min_moisture":    {"$min": "$soil_moisture_pct"},
+                    "max_moisture":    {"$max": "$soil_moisture_pct"},
+                    "avg_ph":          {"$avg": "$ph_value"},
+                    "min_ph":          {"$min": "$ph_value"},
+                    "max_ph":          {"$max": "$ph_value"},
+                    "first_reading":   {"$min": "$received_at"},
+                    "last_reading":    {"$max": "$received_at"},
+                }},
+                {"$project": {
+                    "_id": 0,
+                    "device_id": "$_id",
+                    "date": day_start.strftime("%Y-%m-%d"),
+                    "total_readings": 1,
+                    "temperature":   {"avg": {"$round": ["$avg_temperature", 2]}, "min": {"$round": ["$min_temperature", 2]}, "max": {"$round": ["$max_temperature", 2]}},
+                    "humidity":      {"avg": {"$round": ["$avg_humidity",    2]}, "min": {"$round": ["$min_humidity",    2]}, "max": {"$round": ["$max_humidity",    2]}},
+                    "soil_moisture": {"avg": {"$round": ["$avg_moisture",    2]}, "min": {"$round": ["$min_moisture",    2]}, "max": {"$round": ["$max_moisture",    2]}},
+                    "ph":            {"avg": {"$round": ["$avg_ph",          2]}, "min": {"$round": ["$min_ph",          2]}, "max": {"$round": ["$max_ph",          2]}},
+                    "first_reading": 1, "last_reading": 1,
+                }}
             ]
-
-            results = await collection.aggregate(pipeline).to_list(length=10)
+            results = await self._col.aggregate(pipeline).to_list(length=10)
             return results[0] if results else None
-
         except Exception as e:
             logger.error(f"[Repository] get_daily_summary failed: {e}")
             return None
 
-    async def count_readings(self, device_id: Optional[str] = None) -> int:
-        """Returns total number of readings stored in the database."""
-        collection = self._collection
-        if collection is None:
+    async def count_readings(self, device_id=None) -> int:
+        if not self._col:
             return 0
         try:
-            query = {"device_id": device_id} if device_id else {}
-            return await collection.count_documents(query)
+            q = {"device_id": device_id} if device_id else {}
+            return await self._col.count_documents(q)
         except Exception as e:
             logger.error(f"[Repository] count_readings failed: {e}")
             return 0
 
 
-# Single instance used across the application
-sensor_repository = SensorRepository()
+# =============================================================
+# RECOMMENDATION REPOSITORY
+# Persists every ML prediction so supervisors and teammates
+# can review historical recommendations in Atlas.
+# =============================================================
+
+class RecommendationRepository:
+
+    @property
+    def _col(self):
+        db = get_database()
+        return db[settings.MONGO_COL_RECOMMENDATIONS] if db else None
+
+    async def save(
+        self,
+        device_id:  str,
+        rec_type:   str,    # "crop" | "fertilizer" | "irrigation" | "full"
+        result:     dict,
+        confidence: Optional[float] = None,
+    ) -> Optional[str]:
+        """Saves one ML recommendation to the recommendations collection."""
+        if not self._col:
+            return None
+        try:
+            doc = {
+                "device_id":  device_id,
+                "created_at": datetime.utcnow(),
+                "type":       rec_type,
+                "result":     result,
+                "confidence": confidence,
+            }
+            res = await self._col.insert_one(doc)
+            return str(res.inserted_id)
+        except Exception as e:
+            logger.error(f"[RecommendationRepo] save failed: {e}")
+            return None
+
+    async def get_recent(self, device_id: str, rec_type: str = None, limit: int = 10) -> list:
+        if not self._col:
+            return []
+        try:
+            q = {"device_id": device_id}
+            if rec_type:
+                q["type"] = rec_type
+            cursor = self._col.find(q).sort("created_at", DESCENDING).limit(limit)
+            docs = await cursor.to_list(length=limit)
+            return [_serialize(d) for d in docs]
+        except Exception as e:
+            logger.error(f"[RecommendationRepo] get_recent failed: {e}")
+            return []
+
+
+# =============================================================
+# ALERT REPOSITORY
+# =============================================================
+
+class AlertRepository:
+
+    @property
+    def _col(self):
+        db = get_database()
+        return db[settings.MONGO_COL_ALERTS] if db else None
+
+    async def create_alert(
+        self,
+        device_id:  str,
+        alert_type: str,
+        message:    str,
+        severity:   str = "warning",   # info | warning | critical
+        value:      Optional[float] = None,
+        threshold:  Optional[float] = None,
+    ) -> Optional[str]:
+        if not self._col:
+            return None
+        try:
+            doc = {
+                "device_id":  device_id,
+                "created_at": datetime.utcnow(),
+                "alert_type": alert_type,
+                "severity":   severity,
+                "message":    message,
+                "value":      value,
+                "threshold":  threshold,
+                "resolved":   False,
+            }
+            res = await self._col.insert_one(doc)
+            logger.info(f"[AlertRepo] {severity.upper()} alert created: {alert_type}")
+            return str(res.inserted_id)
+        except Exception as e:
+            logger.error(f"[AlertRepo] create_alert failed: {e}")
+            return None
+
+    async def get_active(self, device_id: str = None, limit: int = 20) -> list:
+        if not self._col:
+            return []
+        try:
+            q = {"resolved": False}
+            if device_id:
+                q["device_id"] = device_id
+            cursor = self._col.find(q).sort("created_at", DESCENDING).limit(limit)
+            docs = await cursor.to_list(length=limit)
+            return [_serialize(d) for d in docs]
+        except Exception as e:
+            logger.error(f"[AlertRepo] get_active failed: {e}")
+            return []
+
+    async def resolve(self, alert_id: str) -> bool:
+        if not self._col:
+            return False
+        try:
+            res = await self._col.update_one(
+                {"_id": ObjectId(alert_id)},
+                {"$set": {"resolved": True, "resolved_at": datetime.utcnow()}}
+            )
+            return res.modified_count > 0
+        except Exception as e:
+            logger.error(f"[AlertRepo] resolve failed: {e}")
+            return False
+
+
+# =============================================================
+# DEVICE REPOSITORY
+# =============================================================
+
+class DeviceRepository:
+
+    @property
+    def _col(self):
+        db = get_database()
+        return db[settings.MONGO_COL_DEVICES] if db else None
+
+    async def update_last_seen(self, device_id: str) -> None:
+        """Upserts a device record every time it sends a reading."""
+        if not self._col:
+            return
+        try:
+            await self._col.update_one(
+                {"device_id": device_id},
+                {"$set":     {"last_seen": datetime.utcnow(), "active": True},
+                 "$setOnInsert": {"device_id": device_id, "registered_at": datetime.utcnow()}},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"[DeviceRepo] update_last_seen failed: {e}")
+
+    async def get_all(self) -> list:
+        if not self._col:
+            return []
+        try:
+            docs = await self._col.find().sort("last_seen", DESCENDING).to_list(length=100)
+            return [_serialize(d) for d in docs]
+        except Exception as e:
+            logger.error(f"[DeviceRepo] get_all failed: {e}")
+            return []
+
+
+# ── Single instances ──────────────────────────────────────────
+sensor_repository         = SensorRepository()
+recommendation_repository = RecommendationRepository()
+alert_repository          = AlertRepository()
+device_repository         = DeviceRepository()
