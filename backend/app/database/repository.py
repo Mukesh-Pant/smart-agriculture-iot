@@ -39,10 +39,10 @@ class SensorRepository:
     @property
     def _col(self):
         db = get_database()
-        return db[settings.MONGO_COL_SENSOR_READINGS] if db else None
+        return db[settings.MONGO_COL_SENSOR_READINGS] if db is not None else None
 
     async def save_reading(self, reading: SensorReadingResponse) -> Optional[str]:
-        if not self._col:
+        if self._col is None:
             return None
         try:
             doc = reading.model_dump(exclude_none=True)
@@ -64,7 +64,7 @@ class SensorRepository:
             return None
 
     async def get_latest(self, device_id: Optional[str] = None) -> Optional[dict]:
-        if not self._col:
+        if self._col is None:
             return None
         try:
             q = {"device_id": device_id} if device_id else {}
@@ -75,7 +75,7 @@ class SensorRepository:
             return None
 
     async def get_history(self, limit=50, skip=0, device_id=None) -> list:
-        if not self._col:
+        if self._col is None:
             return []
         try:
             q = {"device_id": device_id} if device_id else {}
@@ -87,7 +87,7 @@ class SensorRepository:
             return []
 
     async def get_by_id(self, reading_id: str) -> Optional[dict]:
-        if not self._col:
+        if self._col is None:
             return None
         try:
             doc = await self._col.find_one({"_id": ObjectId(reading_id)})
@@ -97,7 +97,7 @@ class SensorRepository:
             return None
 
     async def get_range(self, start, end, device_id=None, limit=500) -> list:
-        if not self._col:
+        if self._col is None:
             return []
         try:
             q = {"received_at": {"$gte": start, "$lte": end}}
@@ -111,7 +111,7 @@ class SensorRepository:
             return []
 
     async def get_daily_summary(self, date=None, device_id=None) -> Optional[dict]:
-        if not self._col:
+        if self._col is None:
             return None
         try:
             if date is None:
@@ -162,7 +162,7 @@ class SensorRepository:
             return None
 
     async def count_readings(self, device_id=None) -> int:
-        if not self._col:
+        if self._col is None:
             return 0
         try:
             q = {"device_id": device_id} if device_id else {}
@@ -183,7 +183,7 @@ class RecommendationRepository:
     @property
     def _col(self):
         db = get_database()
-        return db[settings.MONGO_COL_RECOMMENDATIONS] if db else None
+        return db[settings.MONGO_COL_RECOMMENDATIONS] if db is not None else None
 
     async def save(
         self,
@@ -193,7 +193,7 @@ class RecommendationRepository:
         confidence: Optional[float] = None,
     ) -> Optional[str]:
         """Saves one ML recommendation to the recommendations collection."""
-        if not self._col:
+        if self._col is None:
             return None
         try:
             doc = {
@@ -210,7 +210,7 @@ class RecommendationRepository:
             return None
 
     async def get_recent(self, device_id: str, rec_type: str = None, limit: int = 10) -> list:
-        if not self._col:
+        if self._col is None:
             return []
         try:
             q = {"device_id": device_id}
@@ -233,7 +233,7 @@ class AlertRepository:
     @property
     def _col(self):
         db = get_database()
-        return db[settings.MONGO_COL_ALERTS] if db else None
+        return db[settings.MONGO_COL_ALERTS] if db is not None else None
 
     async def create_alert(
         self,
@@ -244,7 +244,7 @@ class AlertRepository:
         value:      Optional[float] = None,
         threshold:  Optional[float] = None,
     ) -> Optional[str]:
-        if not self._col:
+        if self._col is None:
             return None
         try:
             doc = {
@@ -265,7 +265,7 @@ class AlertRepository:
             return None
 
     async def get_active(self, device_id: str = None, limit: int = 20) -> list:
-        if not self._col:
+        if self._col is None:
             return []
         try:
             q = {"resolved": False}
@@ -279,7 +279,7 @@ class AlertRepository:
             return []
 
     async def resolve(self, alert_id: str) -> bool:
-        if not self._col:
+        if self._col is None:
             return False
         try:
             res = await self._col.update_one(
@@ -301,11 +301,11 @@ class DeviceRepository:
     @property
     def _col(self):
         db = get_database()
-        return db[settings.MONGO_COL_DEVICES] if db else None
+        return db[settings.MONGO_COL_DEVICES] if db is not None else None
 
     async def update_last_seen(self, device_id: str) -> None:
         """Upserts a device record every time it sends a reading."""
-        if not self._col:
+        if self._col is None:
             return
         try:
             await self._col.update_one(
@@ -318,7 +318,7 @@ class DeviceRepository:
             logger.error(f"[DeviceRepo] update_last_seen failed: {e}")
 
     async def get_all(self) -> list:
-        if not self._col:
+        if self._col is None:
             return []
         try:
             docs = await self._col.find().sort("last_seen", DESCENDING).to_list(length=100)
