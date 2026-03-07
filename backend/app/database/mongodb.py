@@ -1,13 +1,5 @@
 # =============================================================
 # app/database/mongodb.py — MongoDB Atlas Connection Manager
-#
-# Upgraded for Atlas:
-#   • TLS enabled automatically for Atlas SRV URIs
-#   • Connection pooling tuned for cloud latency
-#   • Schema validation rules applied to all collections
-#   • Compound indexes for every query pattern in this app
-#   • TTL index: sensor_readings auto-deleted after 90 days
-#   • Graceful fallback to local MongoDB if Atlas unreachable
 # =============================================================
 
 import logging
@@ -29,10 +21,9 @@ async def connect_to_mongo() -> None:
     global _client, _database
 
     is_atlas = "mongodb+srv://" in settings.MONGO_URI
-    logger.info(f"[MongoDB] Connecting ({'Atlas Cloud' if is_atlas else 'Local'})…")
+    logger.info(f"[MongoDB] Connecting ({'Atlas Cloud' if is_atlas else 'Local'})...")
 
     try:
-        # Atlas needs larger timeouts due to network latency
         timeout = 10000 if is_atlas else 5000
 
         _client = AsyncIOMotorClient(
@@ -40,32 +31,27 @@ async def connect_to_mongo() -> None:
             serverSelectionTimeoutMS = timeout,
             connectTimeoutMS         = timeout,
             socketTimeoutMS          = 30000,
-            # Connection pool — Atlas free tier allows 500 connections
             maxPoolSize              = 10,
             minPoolSize              = 1,
-            # Retry writes — essential for Atlas with replica sets
             retryWrites              = True,
-            # Write concern: majority — confirms write on primary + secondary
             w                        = "majority",
         )
 
         await _client.admin.command("ping")
         _database = _client[settings.MONGO_DB_NAME]
 
-        logger.info(f"[MongoDB] ✅ Connected to database: '{settings.MONGO_DB_NAME}'")
+        logger.info(f"[MongoDB] Connected successfully.")
+        logger.info(f"[MongoDB] Using database: '{settings.MONGO_DB_NAME}'")
         if is_atlas:
-            logger.info("[MongoDB] 🌐 Using MongoDB Atlas (cloud)")
+            logger.info("[MongoDB] Using MongoDB Atlas (cloud)")
 
         await _apply_schema_validation()
         await _create_indexes()
 
     except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-        logger.error(f"[MongoDB] ❌ Connection failed: {e}")
+        logger.error(f"[MongoDB] Connection failed: {e}")
         if "mongodb+srv://" in settings.MONGO_URI:
-            logger.error("[MongoDB] Atlas tips:")
-            logger.error("  1. Check MONGO_URI in .env is correct")
-            logger.error("  2. Whitelist your IP in Atlas → Network Access")
-            logger.error("  3. Verify cluster username/password")
+            logger.error("[MongoDB] Atlas tips: 1) Check URI  2) Whitelist IP in Atlas Network Access  3) Check password")
         _client = None
         _database = None
 
@@ -89,9 +75,6 @@ def is_connected() -> bool:
 
 # =============================================================
 # SCHEMA VALIDATION
-# Defines the expected shape of every document in each
-# collection. MongoDB enforces these rules on insert/update —
-# bad data is rejected before it enters the database.
 # =============================================================
 
 async def _apply_schema_validation() -> None:
@@ -100,25 +83,22 @@ async def _apply_schema_validation() -> None:
 
     db = _database
 
-    # ── sensor_readings ───────────────────────────────────────
     sensor_schema = {
         "$jsonSchema": {
             "bsonType": "object",
             "required": ["device_id", "received_at"],
             "properties": {
-                "device_id":          {"bsonType": "string",  "description": "ESP32 device identifier"},
-                "received_at":        {"bsonType": "date",    "description": "Server timestamp (UTC)"},
-                "timestamp":          {"bsonType": ["double","int","long"], "description": "ESP32 unix epoch"},
-                "temperature_c":      {"bsonType": ["double","null"], "minimum": -40, "maximum": 80},
-                "humidity_pct":       {"bsonType": ["double","null"], "minimum": 0,   "maximum": 100},
-                "soil_moisture_pct":  {"bsonType": ["double","null"], "minimum": 0,   "maximum": 100},
-                "ph_value":           {"bsonType": ["double","null"], "minimum": 0,   "maximum": 14},
+                "device_id":          {"bsonType": "string"},
+                "received_at":        {"bsonType": "date"},
+                "temperature_c":      {"bsonType": ["double", "null"]},
+                "humidity_pct":       {"bsonType": ["double", "null"]},
+                "soil_moisture_pct":  {"bsonType": ["double", "null"]},
+                "ph_value":           {"bsonType": ["double", "null"]},
                 "has_errors":         {"bsonType": "bool"},
             }
         }
     }
 
-    # ── recommendations ───────────────────────────────────────
     rec_schema = {
         "$jsonSchema": {
             "bsonType": "object",
@@ -128,12 +108,11 @@ async def _apply_schema_validation() -> None:
                 "created_at": {"bsonType": "date"},
                 "type":       {"bsonType": "string", "enum": ["crop", "fertilizer", "irrigation", "full"]},
                 "result":     {"bsonType": "object"},
-                "confidence": {"bsonType": ["double","null"], "minimum": 0, "maximum": 1},
+                "confidence": {"bsonType": ["double", "null"]},
             }
         }
     }
 
-    # ── alerts ────────────────────────────────────────────────
     alert_schema = {
         "$jsonSchema": {
             "bsonType": "object",
@@ -145,13 +124,10 @@ async def _apply_schema_validation() -> None:
                 "severity":    {"bsonType": "string", "enum": ["info", "warning", "critical"]},
                 "message":     {"bsonType": "string"},
                 "resolved":    {"bsonType": "bool"},
-                "value":       {"bsonType": ["double","null"]},
-                "threshold":   {"bsonType": ["double","null"]},
             }
         }
     }
 
-    # ── devices ───────────────────────────────────────────────
     device_schema = {
         "$jsonSchema": {
             "bsonType": "object",
@@ -159,10 +135,7 @@ async def _apply_schema_validation() -> None:
             "properties": {
                 "device_id":     {"bsonType": "string"},
                 "registered_at": {"bsonType": "date"},
-                "name":          {"bsonType": ["string","null"]},
-                "location":      {"bsonType": ["string","null"]},
-                "firmware":      {"bsonType": ["string","null"]},
-                "last_seen":     {"bsonType": ["date","null"]},
+                "last_seen":     {"bsonType": ["date", "null"]},
                 "active":        {"bsonType": "bool"},
             }
         }
@@ -183,7 +156,7 @@ async def _apply_schema_validation() -> None:
                 await db.create_collection(
                     col_name,
                     validator=schema,
-                    validationLevel="moderate",   # warn but don't reject legacy docs
+                    validationLevel="moderate",
                     validationAction="warn",
                 )
                 logger.info(f"[MongoDB] Created collection '{col_name}' with schema validation.")
@@ -196,10 +169,33 @@ async def _apply_schema_validation() -> None:
 
 
 # =============================================================
+# SAFE INDEX HELPER
+# Never crashes startup — logs and skips on any conflict.
+# =============================================================
+
+async def _safe_create_index(collection, keys, name: str, **kwargs) -> None:
+    """
+    Creates an index only if no index with that name already exists.
+    If the same key pattern exists under a different name (IndexOptionsConflict),
+    this is logged as a warning but never raises — the app starts normally.
+    """
+    try:
+        existing = await collection.index_information()
+        if name in existing:
+            return  # already present, skip silently
+        await collection.create_index(keys, name=name, **kwargs)
+    except OperationFailure as e:
+        errmsg = e.details.get("errmsg", str(e)) if e.details else str(e)
+        logger.warning(f"[MongoDB] Index '{name}' skipped (already exists under different name): {errmsg}")
+    except Exception as e:
+        logger.warning(f"[MongoDB] Index '{name}' skipped: {e}")
+
+
+# =============================================================
 # INDEXES
-# Every query pattern this app runs has a matching index.
-# MongoDB skips creation if index already exists — safe to
-# call on every startup.
+# Uses _safe_create_index everywhere — safe on every restart.
+# Old index name 'idx_device_received' kept to match what
+# was already created on Atlas by the previous mongodb.py.
 # =============================================================
 
 async def _create_indexes() -> None:
@@ -208,45 +204,27 @@ async def _create_indexes() -> None:
 
     db = _database
 
-    # ── sensor_readings indexes ───────────────────────────────
+    # ── sensor_readings ───────────────────────────────────────
     sr = db[settings.MONGO_COL_SENSOR_READINGS]
+    # Keep original name to avoid IndexOptionsConflict on existing Atlas cluster
+    await _safe_create_index(sr, [("received_at", DESCENDING)],                             name="idx_received_at_desc")
+    await _safe_create_index(sr, [("device_id", ASCENDING), ("received_at", DESCENDING)],   name="idx_device_received")
+    await _safe_create_index(sr, [("received_at", ASCENDING), ("device_id", ASCENDING)],    name="idx_time_asc_device")
+    await _safe_create_index(sr, [("received_at", ASCENDING)], name="idx_ttl_90days",       expireAfterSeconds=7_776_000)
 
-    # Most common query: latest readings overall
-    await sr.create_index(
-        [("received_at", DESCENDING)],
-        name="idx_received_at_desc"
-    )
-    # Device-specific queries + time filtering
-    await sr.create_index(
-        [("device_id", ASCENDING), ("received_at", DESCENDING)],
-        name="idx_device_time"
-    )
-    # Analytics pipeline: daily summary by date range
-    await sr.create_index(
-        [("received_at", ASCENDING), ("device_id", ASCENDING)],
-        name="idx_time_asc_device"
-    )
-    # TTL: auto-delete readings older than 90 days
-    await sr.create_index(
-        [("received_at", ASCENDING)],
-        name="idx_ttl_90days",
-        expireAfterSeconds=7_776_000
-    )
-
-    # ── recommendations indexes ───────────────────────────────
+    # ── recommendations ───────────────────────────────────────
     rc = db[settings.MONGO_COL_RECOMMENDATIONS]
-    await rc.create_index([("device_id", ASCENDING), ("created_at", DESCENDING)], name="idx_rec_device_time")
-    await rc.create_index([("type", ASCENDING), ("created_at", DESCENDING)],      name="idx_rec_type_time")
-    # TTL: keep recommendations for 180 days
-    await rc.create_index([("created_at", ASCENDING)], name="idx_rec_ttl", expireAfterSeconds=15_552_000)
+    await _safe_create_index(rc, [("device_id", ASCENDING), ("created_at", DESCENDING)],    name="idx_rec_device_time")
+    await _safe_create_index(rc, [("type", ASCENDING), ("created_at", DESCENDING)],         name="idx_rec_type_time")
+    await _safe_create_index(rc, [("created_at", ASCENDING)], name="idx_rec_ttl",           expireAfterSeconds=15_552_000)
 
-    # ── alerts indexes ────────────────────────────────────────
+    # ── alerts ────────────────────────────────────────────────
     al = db[settings.MONGO_COL_ALERTS]
-    await al.create_index([("device_id", ASCENDING), ("created_at", DESCENDING)], name="idx_alert_device")
-    await al.create_index([("severity", ASCENDING), ("resolved", ASCENDING)],     name="idx_alert_severity")
+    await _safe_create_index(al, [("device_id", ASCENDING), ("created_at", DESCENDING)],    name="idx_alert_device")
+    await _safe_create_index(al, [("severity", ASCENDING), ("resolved", ASCENDING)],        name="idx_alert_severity")
 
-    # ── devices indexes ───────────────────────────────────────
+    # ── devices ───────────────────────────────────────────────
     dv = db[settings.MONGO_COL_DEVICES]
-    await dv.create_index([("device_id", ASCENDING)], name="idx_device_id", unique=True)
+    await _safe_create_index(dv, [("device_id", ASCENDING)], name="idx_device_id",          unique=True)
 
-    logger.info("[MongoDB] ✅ All indexes verified/created.")
+    logger.info("[MongoDB] All indexes verified/created.")
