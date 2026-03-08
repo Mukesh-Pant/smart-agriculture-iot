@@ -221,9 +221,18 @@ class MLService:
             return None
 
         try:
+            # Engineered features matching CROP_FEATS in train_models.py
+            npk_total   = nitrogen + phosphorus + potassium
+            n_to_p      = nitrogen / (phosphorus + 1e-3)
+            n_to_k      = nitrogen / (potassium + 1e-3)
+            p_to_k      = phosphorus / (potassium + 1e-3)
+            heat_index  = temperature * (1 - humidity / 200)
+            water_score = rainfall * humidity / 100
+
             features = np.array([[
                 nitrogen, phosphorus, potassium,
-                temperature, humidity, ph, rainfall
+                temperature, humidity, ph, rainfall,
+                npk_total, n_to_p, n_to_k, p_to_k, heat_index, water_score
             ]])
 
             features_scaled = self._crop_scaler.transform(features)
@@ -296,10 +305,18 @@ class MLService:
             except ValueError:
                 crop_enc = 0
 
+            # Engineered features matching FERT_FEATS
+            npk_total     = nitrogen + phosphorus + potassium
+            n_deficiency  = 40 - nitrogen   if nitrogen < 40   else 0
+            p_deficiency  = 20 - phosphorus if phosphorus < 20 else 0
+            k_deficiency  = 20 - potassium  if potassium < 20  else 0
+            moisture_temp = moisture * temperature / 100
+
             features = np.array([[
                 temperature, humidity, moisture,
                 soil_enc, crop_enc,
-                nitrogen, potassium, phosphorus
+                nitrogen, potassium, phosphorus,
+                npk_total, n_deficiency, p_deficiency, k_deficiency, moisture_temp
             ]])
 
             features_scaled = self._fert_scaler.transform(features)
@@ -361,8 +378,18 @@ class MLService:
             return None
 
         try:
+            # Mock encodings for inference without frontend context
+            crop_type_enc    = 0
+            growth_stage_enc = 0
+            
+            # Engineered features matching IRRIG_FEATS
+            vpd_proxy = (1 - humidity / 100) * temperature
+            dryness   = (100 - soil_moisture) * vpd_proxy / 50
+            eff_rain  = rainfall_mm * 0.75
+
             features = np.array([[
-                soil_moisture, temperature, humidity, ph, rainfall_mm
+                soil_moisture, temperature, humidity, ph, rainfall_mm,
+                crop_type_enc, growth_stage_enc, vpd_proxy, dryness, eff_rain
             ]])
 
             features_scaled = self._irrig_scaler.transform(features)
