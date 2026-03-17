@@ -88,23 +88,19 @@ wandb/
 
 # ── Node.js / Frontend ────────────────────────────────────────
 node_modules/
-frontend/node_modules/
 npm-debug.log*
 yarn-error.log
 .pnpm-debug.log
 yarn.lock
-package-lock.json
 
-# Vite build output
-frontend/dist/
-dist/
+# Next.js build output
 .next/
-.nuxt/
-build/
+out/
 
-# Vite cache
-frontend/.vite/
-.vite/
+# Build output
+dist/
+build/
+.nuxt/
 
 # ── IDEs & Editors ────────────────────────────────────────────
 # VS Code
@@ -156,6 +152,9 @@ mongo-data/
 # ── Docker (for future cloud deployment) ──────────────────────
 .docker/
 docker-compose.override.yml
+
+# ── Project-specific ──────────────────────────────────────────
+CLAUDE.md
 
 # ── Miscellaneous ─────────────────────────────────────────────
 # Test coverage
