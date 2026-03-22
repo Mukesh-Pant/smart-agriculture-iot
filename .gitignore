@@ -72,10 +72,10 @@ models/saved/
 models/trained/
 
 # ML saved models folder (regenerate by running: python ml/train_models.py)
-# backend/ml/saved_models/
+backend/ml/saved_models/
 
-# ML datasets — large CSV files, download from Kaggle (see SETUP_PHASE4.md)
-# backend/ml/datasets/
+# ML datasets — large CSV files, download from Kaggle or auto-generated
+backend/ml/datasets/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -154,7 +154,7 @@ mongo-data/
 docker-compose.override.yml
 
 # ── Project-specific ──────────────────────────────────────────
-CLAUDE.md
+# CLAUDE.md is intentionally tracked — shared AI assistant context for the team
 
 # ── Miscellaneous ─────────────────────────────────────────────
 # Test coverage

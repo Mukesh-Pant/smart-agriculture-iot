@@ -1,12 +1,12 @@
-# 🌱 AgriSense — IoT Smart Agriculture Monitoring & Decision Support System
+# AgriSense — IoT Smart Agriculture Monitoring & Decision Support System
 
 > A production-grade IoT system that collects real-time soil and environmental data
 > via ESP32 sensors, transmits over MQTT, stores in **MongoDB Atlas** (cloud), and applies
-> machine learning to deliver crop, fertilizer, and irrigation recommendations
-> through a professional React.js farmer dashboard.
+> advanced deep learning models to deliver crop, fertilizer, irrigation and soil fertility
+> recommendations through a professional Next.js farmer dashboard.
 
-**Far Western University — Bachelor of Computer Engineering — Major Project**  
-*Sapana Pandey · Mukesh Pant · Adarsh Joshi · Sagar Bist*  
+**Far Western University — Bachelor of Computer Engineering — Major Project**
+*Sapana Pandey · Mukesh Pant · Adarsh Joshi · Sagar Bist*
 **Supervisors:** Er. Birendra Singh Dhami · Er. Kamal Lekhak
 
 ---
@@ -18,29 +18,36 @@
 │                        HARDWARE LAYER                                │
 │   [DHT22] [Soil Moisture] [pH Sensor] [NPK Sensor]                  │
 │                        ↓ analog/digital                              │
-│                   [ESP32 MicroPython]                                │
+│                   [ESP32 MicroPython 1.23]                           │
 │               ↓ WiFi (MQTT publish) / LoRa (optional)               │
 └──────────────────────────────────────────────────────────────────────┘
-                           ↓ MQTT
+                           ↓ MQTT (port 1883)
 ┌──────────────────────────────────────────────────────────────────────┐
 │                        BACKEND LAYER                                 │
-│   [Mosquitto MQTT Broker] → [FastAPI Python Server]                  │
+│   [Mosquitto MQTT Broker] → [Python FastAPI 0.115.5]                 │
 │                                    ↓                                 │
 │               [MongoDB Atlas — agrisense database]                   │
 │     sensor_readings · recommendations · alerts · devices             │
 │          Schema validation · Compound indexes · TTL                  │
 │                                    ↓                                 │
-│              [ML Engine: Random Forest + TabNet]                     │
-│         crop · fertilizer · irrigation recommendations               │
+│         [Phase 8 Advanced ML Engine — PyTorch + TabNet]              │
+│   SwiFT (crop) · TTL (irrigation) · TabNet×2 (soil + fertilizer)    │
+│              LIME XAI explanations for all predictions               │
 │                                    ↓                                 │
 │                [OpenWeatherMap API integration]                      │
 └──────────────────────────────────────────────────────────────────────┘
-                           ↓ REST API (JSON)
+                           ↓ REST API (JSON, port 8000)
+┌──────────────────────────────────────────────────────────────────────┐
+│                    AUTH BACKEND LAYER                                │
+│            [Express.js 5 + Mongoose 9 — port 5000]                  │
+│        User onboarding · JWT token generation · MongoDB              │
+└──────────────────────────────────────────────────────────────────────┘
+                           ↓ JWT / NextAuth session
 ┌──────────────────────────────────────────────────────────────────────┐
 │                       FRONTEND LAYER                                 │
-│         [React 18 + Recharts + Vite — Phase 6 design system]        │
-│    Overview · Sensor Live · AI Advisor · Analytics · Weather         │
-│     system-ui font · animated counters · dot-grid texture            │
+│     [Next.js 16 + TypeScript + Tailwind CSS 4 + shadcn/ui]          │
+│    Dashboard · Sensor Live · AI Advisor · Analytics · Weather        │
+│     Email magic-link auth (NextAuth 5) · Recharts data viz           │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -48,19 +55,37 @@
 
 ## Tech Stack
 
-| Layer        | Technology                                      | Version  |
-|--------------|-------------------------------------------------|----------|
-| Hardware     | ESP32 Dev Board                                 | —        |
-| Sensors      | DHT22, Capacitive Soil Moisture, pH, NPK        | —        |
-| Firmware     | MicroPython                                     | 1.23     |
-| Protocol     | MQTT (Mosquitto broker)                         | 2.x      |
-| Backend      | Python FastAPI + Uvicorn                        | 0.115    |
-| Database     | **MongoDB Atlas** (cloud) via Motor async driver | 7.x     |
-| ML           | scikit-learn Random Forest + TabNet             | 1.5      |
-| Weather      | OpenWeatherMap API (free tier)                  | 3.0      |
-| Frontend     | React 18 + Recharts + Vite                      | 18.3/6.0 |
-| Fonts        | system-ui / -apple-system · Geist Mono          | —        |
-| Version Ctrl | Git + GitHub                                    | —        |
+| Layer        | Technology                                                  | Version     |
+|--------------|-------------------------------------------------------------|-------------|
+| Hardware     | ESP32 Dev Board                                             | —           |
+| Sensors      | DHT22, Capacitive Soil Moisture, pH-4502C, NPK (planned)   | —           |
+| Firmware     | MicroPython                                                 | 1.23        |
+| Protocol     | MQTT (Mosquitto broker)                                     | 2.x         |
+| ML Backend   | Python FastAPI + Uvicorn                                    | 0.115.5     |
+| Database     | MongoDB Atlas (cloud) via Motor async driver                | Motor 3.6   |
+| ML Models    | PyTorch · pytorch-tabnet · scikit-learn · LIME · SHAP       | PT 2.10     |
+| Auth Backend | Express.js + Mongoose + JWT                                 | Express 5   |
+| Auth         | NextAuth 5 (email magic links, MongoDB adapter)             | 5.x         |
+| Frontend     | Next.js + TypeScript + Tailwind CSS 4 + shadcn/ui + Recharts| Next 16    |
+| Weather      | OpenWeatherMap API (free tier)                              | 3.0         |
+| Version Ctrl | Git + GitHub                                                | —           |
+
+---
+
+## ML Models — Phase 8 (Advanced Deep Learning)
+
+| Model | Architecture | Task | Features | Classes | Test Accuracy |
+|-------|-------------|------|----------|---------|---------------|
+| **SwiFT** | Sparse Weighted Fusion Transformer (custom PyTorch) | Crop recommendation | 13 | 22 crops | 63.4% |
+| **TTL** | FT-Transformer / Feature Tokenizer + Transformer | Irrigation advice | 9 num + 2 cat | 5 levels | **98.85%** |
+| **TabNet Soil** | pytorch-tabnet Classifier + LIME XAI | Soil fertility | 5 | Low/Med/High | **85.2%** |
+| **TabNet Fertilizer** | pytorch-tabnet Classifier + LIME XAI | Fertilizer choice | 8 | 7 fertilizers | **96.75%** |
+
+### Key ML Features
+- **Crop-aware irrigation (dual-mode):** SwiFT crop output is automatically chained into TTL irrigation in the `/full` endpoint, demonstrating an integrated ML pipeline
+- **LIME explainability:** `/soil` and `/explain` endpoints return feature importance weights (why the model made that prediction) — supports farmer transparency
+- **FAO-56 ET0:** Hargreaves-Samani reference evapotranspiration used as a derived feature in the irrigation model
+- **5-class irrigation labels:** Sufficient → Moderate Recommended → Highly Recommended → Very Dry → Immediate
 
 ---
 
@@ -69,236 +94,259 @@
 ```
 smart-agriculture-iot/
 │
-├── esp32/                            # MicroPython firmware
+├── esp32-firmware/                   # MicroPython ESP32 firmware
 │   ├── main.py
 │   ├── config.py
 │   ├── mqtt_client.py
-│   ├── sensors/
-│   │   ├── dht22_sensor.py
-│   │   ├── soil_moisture_sensor.py
-│   │   └── ph_sensor.py
-│   ├── utils/
-│   │   ├── wifi_manager.py
-│   │   └── data_formatter.py
-│   ├── WIRING_GUIDE.md
-│   └── SETUP_WINDOWS.md
+│   └── sensors/
 │
-├── backend/                          # FastAPI server
+├── backend/                          # Python FastAPI server (port 8000)
 │   ├── app/
 │   │   ├── main.py
-│   │   ├── core/
-│   │   │   └── settings.py           # All config from .env
+│   │   ├── core/settings.py          # Pydantic BaseSettings, loads .env
 │   │   ├── database/
 │   │   │   ├── mongodb.py            # Atlas connection + schema + indexes
-│   │   │   └── repository.py         # Sensor/Rec/Alert/Device repos
+│   │   │   └── repository.py         # Data access layer
 │   │   ├── models/
 │   │   │   ├── sensor_data.py
-│   │   │   └── recommendation.py
+│   │   │   └── recommendation.py     # Pydantic schemas for all 4 ML models
 │   │   ├── routes/
 │   │   │   ├── sensor_routes.py
 │   │   │   ├── analytics_routes.py
-│   │   │   ├── recommendation_routes.py
+│   │   │   ├── recommendation_routes.py  # 7 endpoints incl. /soil + /explain
 │   │   │   └── weather_routes.py
 │   │   └── services/
 │   │       ├── mqtt_service.py
-│   │       ├── ml_service.py
+│   │       ├── ml_service.py         # Phase 8 inference: SwiFT+TTL+TabNet×2
 │   │       └── weather_service.py
 │   ├── ml/
-│   │   ├── train_models.py           # Trains all 3 ML models
-│   │   ├── generate_fertilizer_dataset.py
-│   │   ├── datasets/                 # (gitignored — download from Kaggle)
-│   │   └── saved_models/             # (gitignored — regenerate locally)
-│   ├── env.example.txt               # Template — copy to .env
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── swift_crop.py         # SwiFT architecture (PyTorch)
+│   │   │   └── ttl_irrigation.py     # FT-Transformer architecture (PyTorch)
+│   │   ├── train_models.py           # Phase 8 training pipeline (all 4 models)
+│   │   ├── datasets/                 # (gitignored — Kaggle CSVs or auto-generated)
+│   │   └── saved_models/             # (gitignored — regenerate via training)
 │   ├── requirements.txt
-│   ├── SETUP_BACKEND.md
-│   ├── SETUP_MONGODB.md
-│   ├── SETUP_ATLAS.md                # Atlas migration guide
-│   └── SETUP_PHASE4.md               # ML model training guide
+│   └── .env.example
 │
-├── frontend/                         # React.js dashboard
+├── NodeJSbackend/                    # Express.js auth backend (port 5000)
+│   ├── index.js
+│   ├── controllers/
+│   ├── middleware/AuthToken.js
+│   ├── models/userModel.js
+│   ├── routes/
+│   └── config/
+│
+├── frontend/                         # Next.js 16 dashboard (port 3000)
 │   ├── src/
-│   │   ├── App.jsx                   # All 5 pages (Phase 6 redesign)
-│   │   ├── main.jsx
-│   │   ├── services/
-│   │   │   └── api.js
-│   │   └── hooks/
-│   │       └── useApi.js
-│   ├── index.html
+│   │   ├── app/
+│   │   │   ├── (auth)/               # Login, email verification pages
+│   │   │   ├── (dashboard)/          # Protected dashboard pages + components
+│   │   │   ├── services/api.js        # FastAPI client (port 8000)
+│   │   │   └── hooks/                # usePolling, useFetch
+│   │   ├── lib/
+│   │   │   ├── auth.ts               # NextAuth 5 config
+│   │   │   └── mongodb.ts            # MongoDB client for NextAuth adapter
+│   │   └── components/
+│   │       └── CheckAuth.tsx         # Auth guard component
 │   ├── package.json
-│   ├── vite.config.js
-│   ├── SETUP_FRONTEND.md
-│   └── SETUP_PHASE6.md               # ← Phase 6 setup guide
+│   └── .env.local.example
 │
-├── .gitignore
+├── CLAUDE.md                         # AI assistant context (conventions, structure)
 └── README.md                         # This file
 ```
 
 ---
 
-## Database Schema (MongoDB Atlas)
+## API Endpoints
 
-**Database:** `agrisense`
+### Python FastAPI (port 8000)
 
-| Collection          | Purpose                              | TTL        |
-|---------------------|--------------------------------------|------------|
-| `sensor_readings`   | Raw IoT telemetry from ESP32         | 90 days    |
-| `daily_summaries`   | Pre-aggregated daily statistics      | —          |
-| `recommendations`   | ML prediction history                | 180 days   |
-| `devices`           | Registered ESP32 devices             | —          |
-| `alerts`            | Threshold breach alerts              | —          |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | System status (MongoDB, MQTT, ML, weather) |
+| GET | `/api/sensors/latest` | Most recent sensor reading |
+| GET | `/api/sensors/history` | Paginated sensor history |
+| POST | `/api/sensors/simulate` | Inject test sensor data |
+| GET | `/api/recommend/full` | All 4 ML recommendations (crop-aware) |
+| POST | `/api/recommend/crop` | SwiFT crop recommendation |
+| POST | `/api/recommend/fertilizer` | TabNet fertilizer recommendation |
+| POST | `/api/recommend/irrigation` | TTL irrigation advice (crop-aware mode) |
+| POST | `/api/recommend/soil` | TabNet soil fertility (Low/Medium/High) |
+| POST | `/api/recommend/explain` | LIME XAI feature importance explanation |
+| GET | `/api/recommend/status` | ML models load status (4/4 Phase 8) |
+| GET | `/api/analytics/summary/daily` | Daily aggregations |
+| GET | `/api/analytics/summary/week` | Weekly summary |
+| GET | `/api/weather/current` | Live OpenWeatherMap data |
 
-All collections have **JSON Schema validation** and **compound indexes** applied automatically on first backend startup.
+### NodeJS Backend (port 5000)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/userOnboarding` | Update user profile from NextAuth session |
+| GET | `/api/settingCookies` | Generate JWT backend_token from session |
 
 ---
 
-## Dashboard Pages (Phase 6 Design)
+## Database Schema (MongoDB Atlas)
 
-| Page            | Description                                                             |
-|-----------------|-------------------------------------------------------------------------|
-| **Overview**    | Animated KPI metrics, sensor trend chart, live AI snapshot, readings table |
-| **Sensor Live** | Large numeric gauges, 4 individual history charts, auto-refresh 8s      |
-| **AI Advisor**  | Full ML recommendations with confidence bars, NPK status, custom tool   |
-| **Analytics**   | 7-day area charts + summary table from MongoDB Atlas aggregations        |
-| **Weather**     | Hero weather card + agricultural impact assessment panel                 |
+**Database:** `agrisense` (Python FastAPI)
 
-### Phase 6 UI Design Principles
-- **Font:** `system-ui, -apple-system` (Claude.ai font stack) + Geist Mono for numbers
-- **Colour:** `#090e09` near-black base · `#16c181` luminous teal-green accent
-- **Depth:** 3 surface levels + top-edge glow on card hover
-- **Motion:** animated counters, page fade-in, progress bar fill, shimmer skeletons
-- **Texture:** dot-grid CSS background (pure CSS, zero images)
+| Collection        | Purpose                          | TTL     |
+|-------------------|----------------------------------|---------|
+| `sensor_readings` | Raw IoT telemetry from ESP32     | 90 days |
+| `daily_summaries` | Pre-aggregated daily statistics  | —       |
+| `recommendations` | ML prediction history            | 180 days|
+| `devices`         | Registered ESP32 devices         | —       |
+| `alerts`          | Threshold breach alerts          | —       |
+
+**Database:** `Agricult` (NextAuth + NodeJS)
+
+| Collection            | Purpose                     |
+|-----------------------|-----------------------------|
+| `users`               | User profiles (firstName, lastName, device_id) |
+| `sessions`            | NextAuth sessions           |
+| `accounts`            | OAuth accounts              |
+| `verification_tokens` | Email magic-link tokens     |
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.11+ (tested on 3.13)
 - Node.js 20+
 - Mosquitto MQTT broker
-- MongoDB Atlas account (free — instructions in `backend/SETUP_ATLAS.md`)
-- OpenWeatherMap API key (free — https://openweathermap.org/api)
+- MongoDB Atlas account (free tier)
+- OpenWeatherMap API key (free)
 
-### Quick Start (New Team Member)
+### Quick Start
 
 ```bash
-# 1. Clone the repository
+# 1. Clone
 git clone https://github.com/Mukesh-Pant/smart-agriculture-iot.git
 cd smart-agriculture-iot
 
-# 2. Backend
+# 2. Python Backend
 cd backend
-copy env.example.txt .env        # Windows
-# cp env.example.txt .env        # Mac/Linux
-# → Get Atlas MONGO_URI from team lead, paste into .env
-pip install -r requirements.txt
-python ml/train_models.py         # trains ML models locally
+python -m venv venv
+source venv/Scripts/activate      # Windows
+pip install -r requirements.txt   # includes torch, pytorch-tabnet, lime, shap
+cp .env.example .env              # fill in MONGO_URI, WEATHER_API_KEY
+python ml/train_models.py         # trains all 4 Phase 8 models (~25 min, CPU)
 uvicorn app.main:app --reload     # http://localhost:8000
 
-# 3. Frontend (new terminal)
+# 3. NodeJS Backend (new terminal)
+cd NodeJSbackend
+npm install
+cp .env.example .env              # fill in MONGODB_URI, JWT_SECRET, AUTH_SECRET
+npm run dev                       # http://localhost:5000
+
+# 4. Frontend (new terminal)
 cd frontend
 npm install
+cp .env.local.example .env.local  # fill in AUTH_SECRET, MONGODB_URI, Gmail SMTP
 npm run dev                       # http://localhost:3000
 
-# 4. MQTT broker (new terminal)
-mosquitto -c mosquitto.conf -v
-
-# 5. ESP32
-# Flash firmware, edit config.py with WiFi credentials + MQTT broker IP
+# 5. MQTT Broker (new terminal)
+mosquitto -v                      # or: mosquitto -c mosquitto.conf -v
 ```
 
-### Detailed Setup Guides
+### ML Model Training Details
 
-| Guide | What it covers |
-|-------|----------------|
-| [`backend/SETUP_ATLAS.md`](backend/SETUP_ATLAS.md) | MongoDB Atlas account + schema + team sharing |
-| [`frontend/SETUP_PHASE6.md`](frontend/SETUP_PHASE6.md) | Phase 6: Atlas + UI redesign (complete guide) |
-| [`esp32/WIRING_GUIDE.md`](esp32/WIRING_GUIDE.md) | Sensor wiring diagrams |
-| [`esp32/SETUP_WINDOWS.md`](esp32/SETUP_WINDOWS.md) | Flashing MicroPython on Windows |
-| [`backend/SETUP_BACKEND.md`](backend/SETUP_BACKEND.md) | FastAPI + MQTT setup |
-| [`backend/SETUP_PHASE4.md`](backend/SETUP_PHASE4.md) | ML model training |
-| [`frontend/SETUP_FRONTEND.md`](frontend/SETUP_FRONTEND.md) | React dashboard setup |
+```bash
+cd backend
+source venv/Scripts/activate
+PYTHONIOENCODING=utf-8 python ml/train_models.py
+
+# Trains 4 models sequentially:
+#   Model 1: SwiFT Crop Recommendation  (~5 min)
+#   Model 2: TTL Irrigation Advice      (~8 min)
+#   Model 3: TabNet Soil Fertility      (~3 min)
+#   Model 4: TabNet Fertilizer          (~5 min)
+#
+# Kaggle datasets (optional, auto-generated if absent):
+#   ml/datasets/Crop_recommendation.csv   → kaggle.com/datasets/atharvaingle/crop-recommendation-dataset
+#   ml/datasets/Fertilizer_Prediction.csv → kaggle.com/datasets/gdabhishek/fertilizer-prediction
+#   ml/datasets/Soil_Fertility.csv        → kaggle.com/datasets/rahuljaiswalonkaggle/soil-fertility-dataset
+```
+
+---
+
+## Authentication Flow
+
+1. User visits `/login` → enters email
+2. NextAuth sends magic-link email (Gmail SMTP)
+3. User clicks link → verified → redirected
+4. First-time users → `/onboarding` (fill name, device ID)
+5. NodeJS backend issues `backend_token` JWT cookie
+6. Dashboard protected by `CheckAuth.tsx` (validates both NextAuth session + JWT)
 
 ---
 
 ## Environment Variables
 
-Copy `backend/env.example.txt` → `backend/.env`:
-
-```bash
-# MongoDB Atlas (get URI from team lead)
-MONGO_URI=mongodb+srv://<user>:<pass>@agrisense.xxxxx.mongodb.net/?retryWrites=true&w=majority
-MONGO_DB_NAME=agrisense
-
-# OpenWeatherMap
-WEATHER_API_KEY=your_openweathermap_key
-WEATHER_CITY=Mahendranagar
-WEATHER_COUNTRY_CODE=NP
-
-# MQTT
-MQTT_BROKER_HOST=localhost
-MQTT_BROKER_PORT=1883
-```
-
-> ⚠️ **Never commit `.env`** — it contains the Atlas password. Share only via private message.
+| File | Variables |
+|------|-----------|
+| `backend/.env` | `MONGO_URI`, `MONGO_DB_NAME`, `WEATHER_API_KEY`, `WEATHER_CITY`, `MQTT_BROKER_HOST` |
+| `frontend/.env.local` | `AUTH_SECRET`, `MONGODB_URI`, `EMAIL_SERVER_*`, `NEXTAUTH_URL`, `NEXT_PUBLIC_API_URL` |
+| `NodeJSbackend/.env` | `MONGODB_URI`, `JWT_SECRET`, `AUTH_SECRET`, `CORS_ORIGINS` |
 
 ---
 
 ## Team Git Workflow
 
 ```bash
-# ─── Before starting work each day ──────────────────────────
+# Before starting work
 git pull origin main
 
-# ─── After finishing a feature ──────────────────────────────
-git add .
-git commit -m "feat: describe what you built"
-git push origin main
-
-# ─── For a larger feature (use a branch) ────────────────────
-git checkout -b feat/your-feature-name
-# ... do work ...
-git add .
-git commit -m "feat: your feature description"
-git push origin feat/your-feature-name
-# → open Pull Request on GitHub → ask team lead to review + merge
-
-# ─── Commit message conventions ─────────────────────────────
+# Commit conventions
 # feat:     new feature
 # fix:      bug fix
 # docs:     documentation only
-# refactor: code restructure (no behaviour change)
-# test:     adding or updating tests
-# chore:    dependency updates, gitignore, etc.
+# refactor: code restructure
+# chore:    dependencies, gitignore
+
+# Push feature
+git add <files>
+git commit -m "feat: description"
+git push origin main
 ```
 
-### Files that are gitignored (each teammate regenerates locally)
+### Gitignored (regenerate locally)
 ```
 backend/.env                    # contains Atlas password
-backend/ml/saved_models/        # ~7MB binary files — run train_models.py
-backend/ml/datasets/            # Kaggle CSVs — download individually
-frontend/node_modules/          # ~200MB — run npm install
-frontend/dist/                  # build output — run npm run build
+backend/venv/                   # Python virtual environment
+backend/ml/saved_models/        # .pth + .zip + .joblib model files
+backend/ml/datasets/            # CSV training datasets
+frontend/.env.local             # contains AUTH_SECRET
+frontend/node_modules/          # npm packages
+NodeJSbackend/.env
+NodeJSbackend/node_modules/
 ```
 
 ---
 
 ## Project Progress
 
-- [x] Phase 1 — ESP32 hardware + MicroPython sensor firmware
-- [x] Phase 2 — Mosquitto MQTT broker + FastAPI backend
-- [x] Phase 3 — MongoDB integration + analytics endpoints
-- [x] Phase 4 — ML models (crop / fertilizer / irrigation) + Weather API
-- [x] Phase 5 — React.js farmer dashboard (5 pages, Recharts)
-- [x] **Phase 6 — MongoDB Atlas cloud migration + schema design + UI redesign**
-- [ ] Phase 7 — Field testing & validation + final project report
+- [x] **Phase 1** — ESP32 hardware + MicroPython sensor firmware
+- [x] **Phase 2** — Mosquitto MQTT broker + FastAPI backend
+- [x] **Phase 3** — MongoDB Atlas integration + analytics endpoints + schema validation
+- [x] **Phase 4** — Random Forest ML models (crop / fertilizer / irrigation) + Weather API
+- [x] **Phase 5** — React.js farmer dashboard (initial version)
+- [x] **Phase 6** — MongoDB Atlas cloud migration + UI redesign
+- [x] **Phase 7** — Feature engineering + GridSearchCV + FAO-56 ET0 irrigation model
+- [x] **Phase 8** — Advanced DL models: SwiFT + TTL + TabNet×2 + LIME XAI + Next.js migration
+- [ ] Field testing & validation + final project report
 
 ---
 
 ## Academic Context
 
-**Institution:** Far Western University, School of Engineering, Mahendranagar, Kanchanpur  
-**Degree:** Bachelor of Computer Engineering  
-**Submitted to:** Research, Innovation and Development Center (RIDC), FWU  
-**Under guidelines of:** Renewable World (RW), 2082  
+**Institution:** Far Western University, School of Engineering, Mahendranagar, Kanchanpur
+**Degree:** Bachelor of Computer Engineering
+**Submitted to:** Research, Innovation and Development Center (RIDC), FWU
+**Under guidelines of:** Renewable World (RW), 2082
 **Project title:** IoT-Based Smart Agriculture Monitoring and Decision Support System
+**Reference paper:** "AI-Driven Smart Agriculture: An Integrated Approach"

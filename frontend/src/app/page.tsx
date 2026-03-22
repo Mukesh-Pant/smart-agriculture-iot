@@ -35,7 +35,8 @@ export default function Home() {
           <div className="px-4 flex-1 flex flex-col justify-center">
             <div className="flex items-center justify-center flex-col gap-3 text-center -mt-10">
               <h1 className="text-3xl font-bold lg:text-5xl xl:text-6xl max-w-4xl bg-linear-to-r from-gray-800 via-gray-700 to-gray-800 bg-clip-text text-transparent">
-                Smart Agriculture for a <br />Sustainable Future
+                Smart Agriculture for a <br />
+                Sustainable Future
               </h1>
               <p className="text-lg lg:text-xl text-gray-600 max-w-2xl">
                 We make it effortless so your crops flourish
@@ -73,7 +74,7 @@ export default function Home() {
             <div className="flex flex-wrap items-center justify-center gap-4 mt-6 px-4">
               {[
                 { name: "Real-time Monitoring", icon: "🌱" },
-                { name: "AI Crop Analysis", icon: "🤖" },
+                { name: "ML Crop Analysis", icon: "🤖" },
                 { name: "Weather Forecasting & Analytics", icon: "☀️" },
                 { name: "ML Advisor", icon: "📦" },
               ].map((feature) => (

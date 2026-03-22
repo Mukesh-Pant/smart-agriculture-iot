@@ -50,7 +50,7 @@ const menuItems = [
     description: "Real-time sensor data",
   },
   {
-    title: "AI Advisor",
+    title: "ML Advisor",
     href: "/ai_advisor",
     icon: BrainCircuit,
     description: "Intelligent recommendations",
@@ -97,32 +97,36 @@ export default function SidebarClient({ session, children }: any) {
 
   // System status mapping
   const systemStatus = [
-    { 
-      label: "MongoDB Atlas", 
+    {
+      label: "MongoDB Atlas",
       key: "mongodb",
       ok: health?.mongodb === "connected",
       icon: Database,
-      color: health?.mongodb === "connected" ? "text-emerald-600" : "text-rose-600", // Darker colors
+      color:
+        health?.mongodb === "connected" ? "text-emerald-600" : "text-rose-600", // Darker colors
     },
-    { 
-      label: "ML Engine", 
+    {
+      label: "ML Engine",
       key: "ml_models",
       ok: health?.ml_models === "loaded",
       icon: Cpu,
-      color: health?.ml_models === "loaded" ? "text-emerald-600" : "text-rose-600",
+      color:
+        health?.ml_models === "loaded" ? "text-emerald-600" : "text-rose-600",
     },
-    { 
-      label: "Weather API", 
+    {
+      label: "Weather API",
       key: "weather_api",
       ok: health?.weather_api === "configured",
       icon: Cloud,
-      color: health?.weather_api === "configured" ? "text-emerald-600" : "text-rose-600",
+      color:
+        health?.weather_api === "configured"
+          ? "text-emerald-600"
+          : "text-rose-600",
     },
   ];
 
   return (
     <Sidebar className="border-r border-blue-300/70 dark:border-blue-800/70 bg-linear-to-br from-blue-50 via-indigo-50 to-white dark:from-blue-900 dark:via-indigo-900 dark:to-slate-800 shadow-md">
-     
       {/* Header */}
       <SidebarHeader className="px-6 py-5 border-b border-blue-300/50 dark:border-blue-700/50 flex items-center justify-center">
         <Logo />
@@ -147,7 +151,7 @@ export default function SidebarClient({ session, children }: any) {
                       isActive
                         ? "bg-purple-200 dark:bg-purple-800/60 text-gray-900 dark:text-white font-medium" // Darker active bg
                         : "hover:bg-purple-100 dark:hover:bg-purple-800/40",
-                      !isActive && "rounded-2xl"
+                      !isActive && "rounded-2xl",
                     )}
                     style={{
                       borderRadius: isActive ? "0 9999px 9999px 0" : "",
@@ -159,7 +163,7 @@ export default function SidebarClient({ session, children }: any) {
                     {isActive && (
                       <div className="absolute left-0 w-1.5 h-10 bg-purple-600 dark:bg-purple-400 rounded-r-full" />
                     )}
-                    
+
                     <Icon
                       className={cn(
                         "w-6 h-6 shrink-0 transition-all duration-300 relative z-10",
@@ -211,9 +215,13 @@ export default function SidebarClient({ session, children }: any) {
               <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
             ) : (
               <div className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full ${health ? 'bg-emerald-600' : 'bg-rose-600'} animate-pulse`} />
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    health ? "bg-emerald-600" : "bg-rose-600"
+                  } animate-pulse`}
+                />
                 <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300">
-                  {health ? 'Connected' : 'Offline'}
+                  {health ? "Connected" : "Offline"}
                 </span>
               </div>
             )}
@@ -234,13 +242,19 @@ export default function SidebarClient({ session, children }: any) {
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      item.ok ? 'bg-emerald-600' : 'bg-rose-600'
-                    } animate-pulse`} />
-                    <span className={`text-[10px] font-semibold ${
-                      item.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
-                    }`}>
-                      {item.ok ? 'Online' : 'Offline'}
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        item.ok ? "bg-emerald-600" : "bg-rose-600"
+                      } animate-pulse`}
+                    />
+                    <span
+                      className={`text-[10px] font-semibold ${
+                        item.ok
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : "text-rose-700 dark:text-rose-400"
+                      }`}
+                    >
+                      {item.ok ? "Online" : "Offline"}
                     </span>
                   </div>
                 </div>
