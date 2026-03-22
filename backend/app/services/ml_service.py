@@ -1,60 +1,76 @@
 # =============================================================
-# app/services/ml_service.py — ML Recommendation Engine
+# app/services/ml_service.py — Phase 8 ML Inference Engine
 #
-# Loads the trained .joblib models at startup and exposes
-# three prediction methods:
-#   - predict_crop()       → which crop to plant
-#   - predict_fertilizer() → which fertilizer to apply
-#   - predict_irrigation() → how much to irrigate
+# Loads and serves 4 advanced deep learning models:
+#   1. SwiFT (PyTorch)      — Crop Recommendation
+#   2. TTL (PyTorch)        — Irrigation Advice (5-class, crop-aware)
+#   3. TabNet (pytorch-tabnet) — Soil Fertility (Low/Medium/High)
+#   4. TabNet (pytorch-tabnet) — Fertilizer Recommendation
 #
-# Each method accepts sensor readings + weather data and returns
-# a structured recommendation with confidence score and advice.
-#
-# All models are loaded once at startup — predictions are fast
-# (milliseconds) because inference is just a tree traversal.
+# XAI: LIME explanations for TabNet models (soil + fertilizer)
 # =============================================================
 
 import os
+import sys
 import logging
 from typing import Optional
 from dataclasses import dataclass, field
 
 import numpy as np
 import joblib
+import torch
 
 from app.core.settings import settings
 
+# Add ml/ to path so models module is importable at runtime
+_ML_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "ml")
+if _ML_DIR not in sys.path:
+    sys.path.insert(0, os.path.abspath(_ML_DIR))
+
 logger = logging.getLogger(__name__)
+DEVICE = torch.device("cpu")
 
 
 # ── Recommendation Dataclasses ────────────────────────────────
 
 @dataclass
 class CropRecommendation:
-    crop:            str
-    confidence:      float              # 0.0 – 1.0
-    top_3:           list               # [(crop, probability), ...]
-    advice:          str
-    input_features:  dict = field(default_factory=dict)
+    crop:           str
+    confidence:     float
+    top_3:          list
+    advice:         str
+    input_features: dict = field(default_factory=dict)
 
 
 @dataclass
 class FertilizerRecommendation:
-    fertilizer:      str
-    confidence:      float
-    top_3:           list
-    advice:          str
-    npk_status:      dict = field(default_factory=dict)   # N/P/K levels
-    input_features:  dict = field(default_factory=dict)
+    fertilizer:     str
+    confidence:     float
+    top_3:          list
+    advice:         str
+    npk_status:     dict = field(default_factory=dict)
+    input_features: dict = field(default_factory=dict)
+    explanation:    Optional[dict] = None
 
 
 @dataclass
 class IrrigationRecommendation:
-    action:          str                # no_irrigation | light_irrigation | heavy_irrigation
+    action:          str
     confidence:      float
     advice:          str
-    water_amount_mm: Optional[float]    # estimated mm of water needed
-    urgency:         str                # low | medium | high
+    water_amount_mm: Optional[float]
+    urgency:         str
+    crop_aware:      bool = False
+    input_features:  dict = field(default_factory=dict)
+
+
+@dataclass
+class SoilFertilityResult:
+    fertility_class: str
+    confidence:      float
+    class_probs:     dict
+    advice:          str
+    explanation:     Optional[dict] = None
     input_features:  dict = field(default_factory=dict)
 
 
@@ -63,6 +79,7 @@ class IrrigationRecommendation:
 CROP_ADVICE = {
     "rice":        "Rice thrives in waterlogged conditions. Ensure adequate irrigation.",
     "maize":       "Maize needs well-drained soil. Avoid waterlogging.",
+    "wheat":       "Wheat prefers cooler temperatures and moderate moisture.",
     "chickpea":    "Chickpea prefers dry conditions. Reduce irrigation frequency.",
     "kidneybeans": "Kidney beans need consistent moisture. Monitor soil regularly.",
     "pigeonpeas":  "Pigeon peas are drought-tolerant. Water sparingly.",
@@ -86,31 +103,39 @@ CROP_ADVICE = {
 }
 
 FERTILIZER_ADVICE = {
-    "Urea":           "Apply Urea for nitrogen deficiency. Use 45–60 kg/ha. Avoid over-application.",
-    "DAP":            "DAP provides nitrogen and phosphorus. Apply at sowing time.",
-    "14-35-14":       "Balanced NPK fertilizer. Apply during active growth phase.",
-    "28-28":          "High N and P formula. Suitable for nitrogen-deficient crops.",
-    "17-17-17":       "Equal NPK ratio. Good general-purpose fertilizer.",
-    "20-20":          "Nitrogen and phosphorus blend. Apply before planting.",
-    "10-26-26":       "High phosphorus and potassium. Good for root development.",
+    "Urea":     "Apply Urea for nitrogen deficiency. Use 45–60 kg/ha. Avoid over-application.",
+    "DAP":      "DAP provides nitrogen and phosphorus. Apply at sowing time.",
+    "14-35-14": "Balanced NPK fertilizer. Apply during active growth phase.",
+    "28-28":    "High N and P formula. Suitable for nitrogen-deficient crops.",
+    "17-17-17": "Equal NPK ratio. Good general-purpose fertilizer.",
+    "20-20":    "Nitrogen and phosphorus blend. Apply before planting.",
+    "10-26-26": "High phosphorus and potassium. Good for root development.",
 }
 
-IRRIGATION_ADVICE = {
-    "no_irrigation":    "Soil moisture is adequate. No irrigation needed right now.",
-    "light_irrigation": "Soil is slightly dry. Apply 15–20mm of water.",
-    "heavy_irrigation": "Soil is critically dry. Apply 30–40mm of water urgently.",
+IRRIGATION_ADVICE = [
+    "Soil moisture is adequate. No irrigation needed.",
+    "Moderate moisture deficit. Apply 10–15mm of water.",
+    "Significant moisture deficit. Apply 20–25mm of water.",
+    "Very dry conditions. Apply 30–35mm of water soon.",
+    "Critical water stress. Apply 40–50mm of water IMMEDIATELY.",
+]
+IRRIGATION_WATER_MM = [None, 12.5, 22.5, 32.5, 45.0]
+IRRIGATION_URGENCY  = ["low", "low", "medium", "high", "critical"]
+
+SOIL_ADVICE = {
+    "Low":    "Soil fertility is LOW. Apply organic manure and balanced NPK. Conduct soil health card test.",
+    "Medium": "Soil fertility is MEDIUM. Maintain with regular organic additions and targeted fertilization.",
+    "High":   "Soil fertility is HIGH. Excellent conditions for most crops. Monitor for nutrient imbalances.",
 }
 
-IRRIGATION_URGENCY = {
-    "no_irrigation":    "low",
-    "light_irrigation": "medium",
-    "heavy_irrigation": "high",
+# FAO-56 crop coefficients for irrigation calculation
+_CROP_KC = {
+    "Wheat":1.15, "Rice":1.20, "Maize":1.20, "Cotton":1.15,
+    "Sugarcane":1.25, "Vegetables":1.05, "Fruits":0.90,
+    "Pulses":1.05, "Groundnut":1.15,
 }
-
-IRRIGATION_WATER_MM = {
-    "no_irrigation":    None,
-    "light_irrigation": 17.5,
-    "heavy_irrigation": 35.0,
+_STAGE_MOD = {
+    "initial":0.80, "development":1.00, "mid_season":1.15, "late_season":0.85
 }
 
 
@@ -118,70 +143,135 @@ IRRIGATION_WATER_MM = {
 
 class MLService:
     """
-    Loads trained scikit-learn models from disk and runs inference.
-    All three models are loaded once at startup for fast predictions.
+    Phase 8 ML inference engine.
+    Loads 4 advanced models at startup and exposes prediction + XAI methods.
     """
 
     def __init__(self):
-        # Crop model artefacts
-        self._crop_model   = None
-        self._crop_encoder = None
-        self._crop_scaler  = None
+        # SwiFT Crop (PyTorch)
+        self._swift_model   = None
+        self._swift_encoder = None
+        self._swift_scaler  = None
+        self._swift_feats   = None
 
-        # Fertilizer model artefacts
-        self._fert_model        = None
-        self._fert_encoder      = None
-        self._fert_scaler       = None
-        self._soil_encoder      = None
-        self._crop_type_encoder = None
+        # TTL Irrigation (PyTorch)
+        self._ttl_model     = None
+        self._ttl_scaler    = None
+        self._ttl_labels    = None
+        self._ttl_num_feats = None
+        self._ttl_crop_enc  = None
+        self._ttl_stage_enc = None
 
-        # Irrigation model artefacts
-        self._irrig_model   = None
-        self._irrig_encoder = None
-        self._irrig_scaler  = None
+        # TabNet Soil Fertility
+        self._soil_model      = None
+        self._soil_encoder    = None
+        self._soil_scaler     = None
+        self._soil_feats      = None
+        self._soil_background = None
+
+        # TabNet Fertilizer
+        self._fert_model      = None
+        self._fert_encoder    = None
+        self._fert_scaler     = None
+        self._fert_soil_enc   = None
+        self._fert_crop_enc   = None
+        self._fert_feats      = None
+        self._fert_background = None
 
         self._models_loaded = False
 
-    def _load(self, filename: str):
-        """Loads a single .joblib file. Returns None if not found."""
+    def _load(self, filename):
         path = os.path.join(settings.ML_MODELS_DIR, filename)
         if not os.path.exists(path):
-            logger.warning(f"[ML] Model file not found: {path}")
+            logger.warning(f"[ML] Not found: {path}")
             return None
         obj = joblib.load(path)
         logger.info(f"[ML] Loaded: {filename}")
         return obj
 
+    def _load_torch(self, model_class, config_file, weights_file):
+        """Reconstruct a PyTorch model from saved config dict + state_dict."""
+        cfg     = self._load(config_file)
+        weights = os.path.join(settings.ML_MODELS_DIR, weights_file)
+        if cfg is None or not os.path.exists(weights):
+            logger.warning(f"[ML] Missing: {config_file} or {weights_file}")
+            return None
+        model = model_class(**cfg)
+        model.load_state_dict(torch.load(weights, map_location=DEVICE))
+        model.eval()
+        model.to(DEVICE)
+        logger.info(f"[ML] Loaded PyTorch model: {weights_file}")
+        return model
+
     def load_all_models(self):
-        """
-        Loads all trained models from ml/saved_models/.
-        Called once at FastAPI startup. Safe to call if files are missing
-        — the service degrades gracefully with a warning.
-        """
-        logger.info("[ML] Loading recommendation models...")
+        """Load all 4 Phase 8 models at FastAPI startup."""
+        logger.info("[ML] Loading Phase 8 advanced models...")
 
-        self._crop_model   = self._load("crop_recommendation_model.joblib")
-        self._crop_encoder = self._load("crop_label_encoder.joblib")
-        self._crop_scaler  = self._load("crop_feature_scaler.joblib")
+        try:
+            from models.swift_crop     import SwiFTCropModel
+            from models.ttl_irrigation import TTLIrrigationModel
+        except ImportError:
+            try:
+                from ml.models.swift_crop     import SwiFTCropModel
+                from ml.models.ttl_irrigation import TTLIrrigationModel
+            except ImportError as e:
+                logger.error(f"[ML] Cannot import model classes: {e}")
+                return
 
-        self._fert_model        = self._load("fertilizer_recommendation_model.joblib")
-        self._fert_encoder      = self._load("fertilizer_label_encoder.joblib")
-        self._fert_scaler       = self._load("fertilizer_feature_scaler.joblib")
-        self._soil_encoder      = self._load("soil_type_encoder.joblib")
-        self._crop_type_encoder = self._load("crop_type_encoder.joblib")
+        try:
+            from pytorch_tabnet.tab_model import TabNetClassifier
+        except ImportError as e:
+            logger.error(f"[ML] pytorch_tabnet not installed: {e}")
+            return
 
-        self._irrig_model   = self._load("irrigation_recommendation_model.joblib")
-        self._irrig_encoder = self._load("irrigation_label_encoder.joblib")
-        self._irrig_scaler  = self._load("irrigation_feature_scaler.joblib")
+        # 1. SwiFT Crop
+        self._swift_model   = self._load_torch(SwiFTCropModel,
+                                               "swift_crop_config.joblib",
+                                               "swift_crop_model.pth")
+        self._swift_encoder = self._load("swift_crop_encoder.joblib")
+        self._swift_scaler  = self._load("swift_crop_scaler.joblib")
+        self._swift_feats   = self._load("swift_crop_feature_names.joblib")
 
-        loaded = sum([
-            self._crop_model is not None,
-            self._fert_model is not None,
-            self._irrig_model is not None,
+        # 2. TTL Irrigation
+        self._ttl_model     = self._load_torch(TTLIrrigationModel,
+                                               "ttl_irrigation_config.joblib",
+                                               "ttl_irrigation_model.pth")
+        self._ttl_scaler    = self._load("ttl_irrigation_scaler.joblib")
+        self._ttl_labels    = self._load("ttl_irrigation_labels.joblib")
+        self._ttl_num_feats = self._load("ttl_irrigation_num_features.joblib")
+        self._ttl_crop_enc  = self._load("ttl_irrig_crop_encoder.joblib")
+        self._ttl_stage_enc = self._load("ttl_irrig_stage_encoder.joblib")
+
+        # 3. TabNet Soil Fertility
+        soil_zip = os.path.join(settings.ML_MODELS_DIR, "tabnet_soil_model.zip")
+        if os.path.exists(soil_zip):
+            self._soil_model = TabNetClassifier()
+            self._soil_model.load_model(soil_zip)
+            logger.info("[ML] Loaded: tabnet_soil_model.zip")
+        self._soil_encoder    = self._load("soil_fertility_encoder.joblib")
+        self._soil_scaler     = self._load("soil_feature_scaler.joblib")
+        self._soil_feats      = self._load("soil_feature_names.joblib")
+        self._soil_background = self._load("soil_lime_background.joblib")
+
+        # 4. TabNet Fertilizer
+        fert_zip = os.path.join(settings.ML_MODELS_DIR, "tabnet_fert_model.zip")
+        if os.path.exists(fert_zip):
+            self._fert_model = TabNetClassifier()
+            self._fert_model.load_model(fert_zip)
+            logger.info("[ML] Loaded: tabnet_fert_model.zip")
+        self._fert_encoder    = self._load("fert_label_encoder.joblib")
+        self._fert_scaler     = self._load("fert_feature_scaler.joblib")
+        self._fert_soil_enc   = self._load("fert_soil_type_encoder.joblib")
+        self._fert_crop_enc   = self._load("fert_crop_type_encoder.joblib")
+        self._fert_feats      = self._load("fert_feature_names.joblib")
+        self._fert_background = self._load("fert_lime_background.joblib")
+
+        loaded = sum(m is not None for m in [
+            self._swift_model, self._ttl_model,
+            self._soil_model,  self._fert_model,
         ])
-
         self._models_loaded = loaded > 0
-        logger.info(f"[ML] {loaded}/3 models loaded successfully.")
+        logger.info(f"[ML] {loaded}/4 Phase 8 models loaded.")
 
         if loaded == 0:
             logger.warning(
@@ -192,174 +282,60 @@ class MLService:
     def is_ready(self) -> bool:
         return self._models_loaded
 
-    # ── Crop Recommendation ───────────────────────────────────
+    # ── Crop Recommendation (SwiFT) ───────────────────────────
 
     def predict_crop(
         self,
-        nitrogen:     float,
-        phosphorus:   float,
-        potassium:    float,
-        temperature:  float,
-        humidity:     float,
-        ph:           float,
-        rainfall:     float,
+        nitrogen:    float,
+        phosphorus:  float,
+        potassium:   float,
+        temperature: float,
+        humidity:    float,
+        ph:          float,
+        rainfall:    float,
     ) -> Optional[CropRecommendation]:
-        """
-        Predicts the best crop to plant given soil and weather data.
-
-        Args:
-            nitrogen:    N content in soil (kg/ha)
-            phosphorus:  P content in soil (kg/ha)
-            potassium:   K content in soil (kg/ha)
-            temperature: Air temperature (°C)
-            humidity:    Relative humidity (%)
-            ph:          Soil pH value
-            rainfall:    Monthly rainfall (mm)
-        """
-        if self._crop_model is None:
-            logger.warning("[ML] Crop model not loaded.")
+        if self._swift_model is None:
+            logger.warning("[ML] SwiFT crop model not loaded.")
             return None
-
         try:
-            # Engineered features matching CROP_FEATS in train_models.py
             npk_total   = nitrogen + phosphorus + potassium
             n_to_p      = nitrogen / (phosphorus + 1e-3)
-            n_to_k      = nitrogen / (potassium + 1e-3)
+            n_to_k      = nitrogen / (potassium  + 1e-3)
             p_to_k      = phosphorus / (potassium + 1e-3)
             heat_index  = temperature * (1 - humidity / 200)
             water_score = rainfall * humidity / 100
 
-            features = np.array([[
-                nitrogen, phosphorus, potassium,
-                temperature, humidity, ph, rainfall,
-                npk_total, n_to_p, n_to_k, p_to_k, heat_index, water_score
-            ]])
+            feat = np.array([[nitrogen, phosphorus, potassium, temperature, humidity,
+                              ph, rainfall, npk_total, n_to_p, n_to_k, p_to_k,
+                              heat_index, water_score]], dtype=np.float32)
+            feat_sc = self._swift_scaler.transform(feat)
 
-            features_scaled = self._crop_scaler.transform(features)
+            with torch.no_grad():
+                logits = self._swift_model(torch.tensor(feat_sc, dtype=torch.float32).to(DEVICE))
+                probas = torch.softmax(logits, dim=1)[0].cpu().numpy()
 
-            # Get class probabilities
-            probas     = self._crop_model.predict_proba(features_scaled)[0]
-            top_idx    = np.argsort(probas)[::-1][:3]
-            top_3      = [
-                (self._crop_encoder.classes_[i], round(float(probas[i]), 4))
-                for i in top_idx
-            ]
-            best_crop  = top_3[0][0]
-            confidence = top_3[0][1]
-
-            advice = CROP_ADVICE.get(
-                best_crop.lower(),
-                f"Ensure proper soil management for {best_crop} cultivation."
-            )
+            top_idx = np.argsort(probas)[::-1][:3]
+            top_3   = [(self._swift_encoder.classes_[i], round(float(probas[i]), 4))
+                       for i in top_idx]
+            best    = top_3[0][0]
 
             return CropRecommendation(
-                crop           = best_crop,
-                confidence     = confidence,
+                crop           = best,
+                confidence     = top_3[0][1],
                 top_3          = top_3,
-                advice         = advice,
+                advice         = CROP_ADVICE.get(best.lower(),
+                                 f"Ensure proper soil management for {best} cultivation."),
                 input_features = {
                     "N": nitrogen, "P": phosphorus, "K": potassium,
                     "temperature": temperature, "humidity": humidity,
                     "pH": ph, "rainfall_mm": rainfall,
-                }
+                },
             )
-
         except Exception as e:
             logger.error(f"[ML] Crop prediction failed: {e}")
             return None
 
-    # ── Fertilizer Recommendation ─────────────────────────────
-
-    def predict_fertilizer(
-        self,
-        temperature:  float,
-        humidity:     float,
-        moisture:     float,
-        soil_type:    str,
-        crop_type:    str,
-        nitrogen:     float,
-        potassium:    float,
-        phosphorus:   float,
-    ) -> Optional[FertilizerRecommendation]:
-        """
-        Predicts the most appropriate fertilizer.
-
-        Args:
-            soil_type:  e.g. "Sandy", "Loamy", "Black", "Red", "Clayey"
-            crop_type:  e.g. "Wheat", "Rice", "Maize", "Cotton", etc.
-        """
-        if self._fert_model is None:
-            logger.warning("[ML] Fertilizer model not loaded.")
-            return None
-
-        try:
-            # Encode categorical features
-            # Handle unseen labels gracefully
-            try:
-                soil_enc = self._soil_encoder.transform([soil_type])[0]
-            except ValueError:
-                soil_enc = 0   # default to first class if unseen
-
-            try:
-                crop_enc = self._crop_type_encoder.transform([crop_type])[0]
-            except ValueError:
-                crop_enc = 0
-
-            # Engineered features matching FERT_FEATS
-            npk_total     = nitrogen + phosphorus + potassium
-            n_deficiency  = 40 - nitrogen   if nitrogen < 40   else 0
-            p_deficiency  = 20 - phosphorus if phosphorus < 20 else 0
-            k_deficiency  = 20 - potassium  if potassium < 20  else 0
-            moisture_temp = moisture * temperature / 100
-
-            features = np.array([[
-                temperature, humidity, moisture,
-                soil_enc, crop_enc,
-                nitrogen, potassium, phosphorus,
-                npk_total, n_deficiency, p_deficiency, k_deficiency, moisture_temp
-            ]])
-
-            features_scaled = self._fert_scaler.transform(features)
-            probas   = self._fert_model.predict_proba(features_scaled)[0]
-            top_idx  = np.argsort(probas)[::-1][:3]
-            top_3    = [
-                (self._fert_encoder.classes_[i], round(float(probas[i]), 4))
-                for i in top_idx
-            ]
-            best_fert  = top_3[0][0]
-            confidence = top_3[0][1]
-
-            # NPK status analysis
-            npk_status = {
-                "nitrogen":   "low" if nitrogen < 40 else ("high" if nitrogen > 80 else "optimal"),
-                "phosphorus": "low" if phosphorus < 20 else ("high" if phosphorus > 60 else "optimal"),
-                "potassium":  "low" if potassium < 20 else ("high" if potassium > 80 else "optimal"),
-            }
-
-            advice = FERTILIZER_ADVICE.get(
-                best_fert,
-                f"Apply {best_fert} as recommended. Follow package instructions."
-            )
-
-            return FertilizerRecommendation(
-                fertilizer     = best_fert,
-                confidence     = confidence,
-                top_3          = top_3,
-                advice         = advice,
-                npk_status     = npk_status,
-                input_features = {
-                    "temperature": temperature, "humidity": humidity,
-                    "moisture": moisture, "soil_type": soil_type,
-                    "crop_type": crop_type, "N": nitrogen,
-                    "K": potassium, "P": phosphorus,
-                }
-            )
-
-        except Exception as e:
-            logger.error(f"[ML] Fertilizer prediction failed: {e}")
-            return None
-
-    # ── Irrigation Recommendation ─────────────────────────────
+    # ── Irrigation Advice (TTL, dual-mode) ────────────────────
 
     def predict_irrigation(
         self,
@@ -368,57 +344,214 @@ class MLService:
         humidity:      float,
         ph:            float,
         rainfall_mm:   float,
+        crop_type:     str   = "Wheat",
+        growth_stage:  str   = "mid_season",
+        crop_aware:    bool  = False,
     ) -> Optional[IrrigationRecommendation]:
-        """
-        Predicts whether irrigation is needed and how much.
-        This model uses real-time sensor data + weather rainfall.
-        """
-        if self._irrig_model is None:
-            logger.warning("[ML] Irrigation model not loaded.")
+        if self._ttl_model is None:
+            logger.warning("[ML] TTL irrigation model not loaded.")
             return None
-
         try:
-            # Mock encodings for inference without frontend context
-            crop_type_enc    = 0
-            growth_stage_enc = 0
-            
-            # Engineered features matching IRRIG_FEATS
-            vpd_proxy = (1 - humidity / 100) * temperature
-            dryness   = (100 - soil_moisture) * vpd_proxy / 50
-            eff_rain  = rainfall_mm * 0.75
+            try:
+                crop_enc = int(self._ttl_crop_enc.transform([crop_type])[0])
+            except (ValueError, AttributeError):
+                crop_enc = 0
+            try:
+                stage_enc = int(self._ttl_stage_enc.transform([growth_stage])[0])
+            except (ValueError, AttributeError):
+                stage_enc = 2  # mid_season default
 
-            features = np.array([[
-                soil_moisture, temperature, humidity, ph, rainfall_mm,
-                crop_type_enc, growth_stage_enc, vpd_proxy, dryness, eff_rain
-            ]])
+            Kc  = _CROP_KC.get(crop_type, 1.0) * _STAGE_MOD.get(growth_stage, 1.0)
+            ET0 = max(0.5, 0.0023 * (temperature + 17.8) *
+                      (abs(temperature - 18) ** 0.5 + 3) * 0.40)
+            ETc = ET0 * Kc
+            vpd = (1 - humidity / 100) * temperature
+            depl = max(0.0, (100 - soil_moisture) + (ETc - rainfall_mm * 0.75 / 7) * 2.5)
 
-            features_scaled = self._irrig_scaler.transform(features)
-            probas     = self._irrig_model.predict_proba(features_scaled)[0]
-            pred_class = int(self._irrig_model.predict(features_scaled)[0])
-            confidence = float(probas[pred_class])
+            x_num = np.array([[soil_moisture, temperature, humidity, ph,
+                               rainfall_mm, ET0, ETc, vpd, min(depl, 100)]],
+                             dtype=np.float32)
+            x_cat = np.array([[crop_enc, stage_enc]], dtype=np.int64)
 
-            action_names  = ["no_irrigation", "light_irrigation", "heavy_irrigation"]
-            action        = action_names[pred_class]
+            x_num_sc = self._ttl_scaler.transform(x_num)
+
+            with torch.no_grad():
+                logits = self._ttl_model(
+                    torch.tensor(x_num_sc, dtype=torch.float32).to(DEVICE),
+                    torch.tensor(x_cat,    dtype=torch.long).to(DEVICE),
+                )
+                probas = torch.softmax(logits, dim=1)[0].cpu().numpy()
+
+            pred_class = int(np.argmax(probas))
+            labels = self._ttl_labels or [
+                "No Irrigation", "Irrigation Recommended", "Highly Recommended",
+                "Very Dry", "Immediate Irrigation",
+            ]
 
             return IrrigationRecommendation(
-                action          = action,
-                confidence      = confidence,
-                advice          = IRRIGATION_ADVICE[action],
-                water_amount_mm = IRRIGATION_WATER_MM[action],
-                urgency         = IRRIGATION_URGENCY[action],
+                action          = labels[pred_class],
+                confidence      = round(float(probas[pred_class]), 4),
+                advice          = IRRIGATION_ADVICE[pred_class],
+                water_amount_mm = IRRIGATION_WATER_MM[pred_class],
+                urgency         = IRRIGATION_URGENCY[pred_class],
+                crop_aware      = crop_aware,
                 input_features  = {
                     "soil_moisture_pct": soil_moisture,
                     "temperature_c":     temperature,
                     "humidity_pct":      humidity,
                     "ph_value":          ph,
                     "rainfall_mm":       rainfall_mm,
-                }
+                    "crop_type":         crop_type,
+                    "growth_stage":      growth_stage,
+                    "ET0":               round(ET0, 3),
+                    "ETc":               round(ETc, 3),
+                    "crop_aware_mode":   crop_aware,
+                },
             )
-
         except Exception as e:
             logger.error(f"[ML] Irrigation prediction failed: {e}")
             return None
 
+    # ── Fertilizer Recommendation (TabNet + LIME) ─────────────
 
-# Single instance loaded at startup
+    def predict_fertilizer(
+        self,
+        temperature: float,
+        humidity:    float,
+        moisture:    float,
+        soil_type:   str,
+        crop_type:   str,
+        nitrogen:    float,
+        potassium:   float,
+        phosphorus:  float,
+        explain:     bool = False,
+    ) -> Optional[FertilizerRecommendation]:
+        if self._fert_model is None:
+            logger.warning("[ML] TabNet fertilizer model not loaded.")
+            return None
+        try:
+            try:
+                soil_enc = int(self._fert_soil_enc.transform([soil_type])[0])
+            except (ValueError, AttributeError):
+                soil_enc = 0
+            try:
+                crop_enc = int(self._fert_crop_enc.transform([crop_type])[0])
+            except (ValueError, AttributeError):
+                crop_enc = 0
+
+            feat = np.array([[temperature, humidity, moisture,
+                              soil_enc, crop_enc, nitrogen, potassium, phosphorus]],
+                            dtype=np.float32)
+            feat_sc = self._fert_scaler.transform(feat)
+
+            probas   = self._fert_model.predict_proba(feat_sc)[0]
+            top_idx  = np.argsort(probas)[::-1][:3]
+            top_3    = [(self._fert_encoder.classes_[i], round(float(probas[i]), 4))
+                        for i in top_idx]
+            best_fert = top_3[0][0]
+
+            npk_status = {
+                "nitrogen":   "low" if nitrogen < 40 else ("high" if nitrogen > 80 else "optimal"),
+                "phosphorus": "low" if phosphorus < 20 else ("high" if phosphorus > 60 else "optimal"),
+                "potassium":  "low" if potassium < 20 else ("high" if potassium > 80 else "optimal"),
+            }
+
+            explanation = None
+            if explain and self._fert_background is not None:
+                explanation = self._lime_explain(
+                    self._fert_model, self._fert_background,
+                    feat_sc[0], self._fert_feats, self._fert_encoder.classes_
+                )
+
+            return FertilizerRecommendation(
+                fertilizer     = best_fert,
+                confidence     = top_3[0][1],
+                top_3          = top_3,
+                advice         = FERTILIZER_ADVICE.get(best_fert,
+                                 f"Apply {best_fert} as recommended."),
+                npk_status     = npk_status,
+                input_features = {
+                    "temperature": temperature, "humidity": humidity,
+                    "moisture": moisture, "soil_type": soil_type,
+                    "crop_type": crop_type, "N": nitrogen,
+                    "K": potassium, "P": phosphorus,
+                },
+                explanation = explanation,
+            )
+        except Exception as e:
+            logger.error(f"[ML] Fertilizer prediction failed: {e}")
+            return None
+
+    # ── Soil Fertility (TabNet + LIME) ────────────────────────
+
+    def predict_soil_fertility(
+        self,
+        nitrogen:   float,
+        phosphorus: float,
+        potassium:  float,
+        ph:         float,
+        moisture:   float,
+        explain:    bool = False,
+    ) -> Optional[SoilFertilityResult]:
+        if self._soil_model is None:
+            logger.warning("[ML] TabNet soil model not loaded.")
+            return None
+        try:
+            feat    = np.array([[nitrogen, phosphorus, potassium, ph, moisture]],
+                               dtype=np.float32)
+            feat_sc = self._soil_scaler.transform(feat)
+            probas  = self._soil_model.predict_proba(feat_sc)[0]
+            classes = self._soil_encoder.classes_
+            pred_idx = int(np.argmax(probas))
+
+            explanation = None
+            if explain and self._soil_background is not None:
+                explanation = self._lime_explain(
+                    self._soil_model, self._soil_background,
+                    feat_sc[0], self._soil_feats, classes
+                )
+
+            return SoilFertilityResult(
+                fertility_class = classes[pred_idx],
+                confidence      = round(float(probas[pred_idx]), 4),
+                class_probs     = {c: round(float(p), 4) for c, p in zip(classes, probas)},
+                advice          = SOIL_ADVICE.get(classes[pred_idx], ""),
+                explanation     = explanation,
+                input_features  = {
+                    "N": nitrogen, "P": phosphorus, "K": potassium,
+                    "pH": ph, "moisture": moisture,
+                },
+            )
+        except Exception as e:
+            logger.error(f"[ML] Soil fertility prediction failed: {e}")
+            return None
+
+    # ── LIME Explanation Helper ───────────────────────────────
+
+    def _lime_explain(self, model, X_background, x_instance,
+                      feature_names, class_names, top_features=5) -> Optional[dict]:
+        """LIME local explanation for a single TabNet prediction."""
+        try:
+            from lime.lime_tabular import LimeTabularExplainer
+            explainer = LimeTabularExplainer(
+                X_background,
+                feature_names         = list(feature_names),
+                class_names           = [str(c) for c in class_names],
+                mode                  = "classification",
+                discretize_continuous = True,
+                random_state          = 42,
+            )
+            exp = explainer.explain_instance(
+                x_instance,
+                model.predict_proba,
+                num_features = top_features,
+                num_samples  = 200,
+            )
+            return dict(exp.as_list())
+        except Exception as e:
+            logger.warning(f"[ML] LIME explanation failed: {e}")
+            return None
+
+
+# Single instance loaded at FastAPI startup
 ml_service = MLService()
