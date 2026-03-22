@@ -26,6 +26,9 @@ from app.models.recommendation import (
     IrrigationRecommendationResponse,
     FullRecommendationResponse,
     TopPrediction,
+    SoilFertilityRequest,
+    SoilFertilityResponse,
+    ExplainRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,6 +88,18 @@ def _format_irrigation(result) -> IrrigationRecommendationResponse:
         urgency         = result.urgency,
         input_used      = result.input_features,
         weather_used    = result.input_features.get("rainfall_mm", 0) > 0,
+    )
+
+
+def _format_soil(result) -> SoilFertilityResponse:
+    return SoilFertilityResponse(
+        fertility_class = result.fertility_class,
+        confidence      = result.confidence,
+        confidence_pct  = f"{result.confidence * 100:.1f}%",
+        class_probs     = result.class_probs,
+        advice          = result.advice,
+        explanation     = result.explanation,
+        input_used      = result.input_features,
     )
 
 
@@ -160,7 +175,7 @@ async def get_full_recommendation():
     if weather:
         weather_dict = weather.to_dict()
 
-    # ── 4. Run all three ML models ────────────────────────────
+    # ── 4. Run all four ML models ─────────────────────────────
 
     # Crop recommendation — uses weather temp/humidity/rainfall
     crop_result = ml_service.predict_crop(
@@ -185,21 +200,35 @@ async def get_full_recommendation():
         phosphorus  = phosphorus,
     )
 
-    # Irrigation — uses real sensor moisture + weather rainfall
+    # Soil fertility — uses same NPK + sensor data
+    soil_result = ml_service.predict_soil_fertility(
+        nitrogen   = nitrogen,
+        phosphorus = phosphorus,
+        potassium  = potassium,
+        ph         = ph_value,
+        moisture   = soil_moisture_pct,
+    )
+
+    # Irrigation — crop-aware using crop recommendation output
+    best_crop = crop_result.crop if crop_result else "Wheat"
     irrig_result = ml_service.predict_irrigation(
         soil_moisture = soil_moisture_pct,
         temperature   = temperature_c,
         humidity      = humidity_pct,
         ph            = ph_value,
         rainfall_mm   = rainfall_mm,
+        crop_type     = best_crop,
+        growth_stage  = "mid_season",
+        crop_aware    = True,
     )
 
     return FullRecommendationResponse(
         sensor_data_used  = sensor_dict,
         weather_data_used = weather_dict,
-        crop              = _format_crop(crop_result)       if crop_result  else None,
-        fertilizer        = _format_fertilizer(fert_result) if fert_result  else None,
+        crop              = _format_crop(crop_result)        if crop_result  else None,
+        fertilizer        = _format_fertilizer(fert_result)  if fert_result  else None,
         irrigation        = _format_irrigation(irrig_result) if irrig_result else None,
+        soil              = _format_soil(soil_result)        if soil_result  else None,
         ml_ready          = ml_service.is_ready(),
         weather_available = weather is not None,
         warnings          = warnings,
@@ -337,6 +366,9 @@ async def recommend_irrigation(request: IrrigationRecommendationRequest):
         humidity      = humidity,
         ph            = ph,
         rainfall_mm   = rainfall_mm,
+        crop_type     = request.crop_type or "Wheat",
+        growth_stage  = request.growth_stage or "mid_season",
+        crop_aware    = request.crop_aware,
     )
 
     if result is None:
@@ -345,20 +377,90 @@ async def recommend_irrigation(request: IrrigationRecommendationRequest):
     return _format_irrigation(result)
 
 
-@router.get(
-    "/status",
-    summary="Check ML models load status"
-)
+@router.get("/status", summary="Check ML models load status")
 async def get_ml_status():
     """Returns which ML models are loaded and ready for inference."""
     return {
-        "ml_ready":          ml_service.is_ready(),
-        "crop_model":        ml_service._crop_model   is not None,
-        "fertilizer_model":  ml_service._fert_model   is not None,
-        "irrigation_model":  ml_service._irrig_model  is not None,
+        "ml_ready":           ml_service.is_ready(),
+        "swift_crop_model":   ml_service._swift_model  is not None,
+        "ttl_irrigation":     ml_service._ttl_model    is not None,
+        "tabnet_soil":        ml_service._soil_model   is not None,
+        "tabnet_fertilizer":  ml_service._fert_model   is not None,
+        "phase":              "Phase 8 — Advanced DL Models (SwiFT + TTL + TabNet×2)",
         "weather_configured": weather_service.is_configured(),
         "message": (
-            "All systems ready." if ml_service.is_ready()
+            "All 4 Phase 8 models ready." if ml_service.is_ready()
             else "Run: python ml/train_models.py — then restart."
         )
     }
+
+
+@router.post(
+    "/soil",
+    response_model=SoilFertilityResponse,
+    summary="Soil fertility analysis (Low/Medium/High) with optional LIME explanation"
+)
+async def recommend_soil(request: SoilFertilityRequest):
+    """
+    Classifies soil fertility using TabNet.
+    Optionally returns LIME feature importance explaining the prediction.
+    Moisture and pH auto-filled from live sensor if not provided.
+    """
+    _require_ml()
+
+    latest = mqtt_module.latest_reading
+    moisture = request.moisture
+    if moisture is None:
+        moisture = (latest.soil_moisture_pct if latest else 50.0)
+
+    result = ml_service.predict_soil_fertility(
+        nitrogen   = request.nitrogen,
+        phosphorus = request.phosphorus,
+        potassium  = request.potassium,
+        ph         = request.ph,
+        moisture   = moisture,
+        explain    = request.explain,
+    )
+    if result is None:
+        raise HTTPException(status_code=500, detail="Soil fertility prediction failed.")
+    return _format_soil(result)
+
+
+@router.post(
+    "/explain",
+    summary="Get LIME XAI explanation for a fertilizer or soil fertility prediction"
+)
+async def get_explanation(request: ExplainRequest):
+    """
+    Returns LIME feature importance weights showing which soil/environment
+    features most influenced the recommendation. Useful for farmer transparency.
+    """
+    _require_ml()
+
+    if request.model_type == "soil":
+        result = ml_service.predict_soil_fertility(
+            nitrogen=request.nitrogen, phosphorus=request.phosphorus,
+            potassium=request.potassium, ph=request.ph,
+            moisture=request.moisture, explain=True,
+        )
+        return {
+            "model": "soil_fertility",
+            "prediction": result.fertility_class if result else None,
+            "explanation": result.explanation if result else None,
+        }
+
+    if request.model_type == "fertilizer":
+        result = ml_service.predict_fertilizer(
+            temperature=request.temperature, humidity=request.humidity,
+            moisture=request.moisture, soil_type=request.soil_type,
+            crop_type=request.crop_type, nitrogen=request.nitrogen,
+            potassium=request.potassium, phosphorus=request.phosphorus,
+            explain=True,
+        )
+        return {
+            "model": "fertilizer",
+            "prediction": result.fertilizer if result else None,
+            "explanation": result.explanation if result else None,
+        }
+
+    raise HTTPException(status_code=400, detail="model_type must be 'fertilizer' or 'soil'")

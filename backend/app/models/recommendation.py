@@ -3,7 +3,7 @@
 # =============================================================
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Dict
 
 
 # ── Weather Models ────────────────────────────────────────────
@@ -92,6 +92,9 @@ class IrrigationRecommendationRequest(BaseModel):
     humidity:      Optional[float] = Field(None, ge=0,  le=100)
     ph:            Optional[float] = Field(None, ge=0,  le=14)
     rainfall_mm:   Optional[float] = Field(None, ge=0,  le=500)
+    crop_type:     Optional[str]   = Field("Wheat", description="Crop type for crop-aware mode")
+    growth_stage:  Optional[str]   = Field("mid_season", description="Growth stage")
+    crop_aware:    bool             = Field(False, description="Use crop-recommendation output to inform irrigation")
 
 
 # ── Recommendation Response Models ───────────────────────────
@@ -144,6 +147,41 @@ class FullRecommendationResponse(BaseModel):
     crop:              Optional[CropRecommendationResponse]
     fertilizer:        Optional[FertilizerRecommendationResponse]
     irrigation:        Optional[IrrigationRecommendationResponse]
+    soil:              Optional["SoilFertilityResponse"] = None
     ml_ready:          bool
     weather_available: bool
     warnings:          list[str] = []
+
+
+# ── Soil Fertility Models ─────────────────────────────────────
+
+class SoilFertilityRequest(BaseModel):
+    nitrogen:   float          = Field(60.0, ge=0,   le=200, description="Nitrogen (kg/ha)")
+    phosphorus: float          = Field(40.0, ge=0,   le=150, description="Phosphorus (kg/ha)")
+    potassium:  float          = Field(40.0, ge=0,   le=250, description="Potassium (kg/ha)")
+    ph:         float          = Field(6.5,  ge=3.5, le=9.0, description="Soil pH")
+    moisture:   Optional[float] = Field(None, ge=0,  le=100, description="Soil moisture %. Auto-filled from sensor if None.")
+    explain:    bool            = Field(False, description="Include LIME feature importance explanation")
+
+
+class SoilFertilityResponse(BaseModel):
+    fertility_class: str
+    confidence:      float
+    confidence_pct:  str
+    class_probs:     dict
+    advice:          str
+    explanation:     Optional[dict] = None
+    input_used:      dict
+
+
+class ExplainRequest(BaseModel):
+    model_type:  str             = Field(..., description="'fertilizer' or 'soil'")
+    nitrogen:    Optional[float] = Field(60.0)
+    phosphorus:  Optional[float] = Field(40.0)
+    potassium:   Optional[float] = Field(40.0)
+    ph:          Optional[float] = Field(6.5)
+    moisture:    Optional[float] = Field(50.0)
+    temperature: Optional[float] = Field(25.0)
+    humidity:    Optional[float] = Field(60.0)
+    soil_type:   Optional[str]   = Field("Loamy")
+    crop_type:   Optional[str]   = Field("Wheat")
