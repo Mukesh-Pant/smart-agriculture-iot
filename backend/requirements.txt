@@ -28,6 +28,12 @@ numpy==2.1.3                   # Numerical computing
 pandas==2.2.3                  # Data manipulation and CSV loading
 joblib==1.4.2                  # Model serialization (.joblib files)
 
+# Deep Learning (Phase 8 — Advanced Models)
+torch==2.10.0                  # SwiFT + TTL custom PyTorch models (CPU build)
+pytorch-tabnet==4.1.0          # TabNet Classifier for soil + fertilizer
+lime==0.2.0.1                  # LIME local explanations for TabNet XAI
+shap==0.46.0                   # SHAP global feature importance
+
 # ── Utilities ─────────────────────────────────────────────────
 python-dotenv==1.0.1
 python-dateutil==2.9.0
