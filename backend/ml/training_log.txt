@@ -1,0 +1,150 @@
+=================================================================
+  AgriSense Phase 8 — Advanced DL Training Pipeline
+  Device: cpu  |  PyTorch: 2.10.0+cpu
+=================================================================
+
+── Model 1: SwiFT Crop Recommendation ────────────────────
+  Loaded Crop_recommendation.csv  (2200 rows)
+  Crops (22): ['apple', 'banana', 'blackgram', 'chickpea', 'coconut', 'coffee', 'cotton', 'grapes', 'jute', 'kidneybeans', 'lentil', 'maize', 'mango', 'mothbeans', 'mungbean', 'muskmelon', 'orange', 'papaya', 'pigeonpeas', 'pomegranate', 'rice', 'watermelon']
+  Features: 13   Samples: 2200
+    Epoch  10/50  val_acc=47.35%  best=47.35%
+    Epoch  20/50  val_acc=54.92%  best=63.26%
+    Epoch  30/50  val_acc=66.29%  best=67.42%
+    Early stop at epoch 37
+    Best validation accuracy: 67.42%
+
+  SwiFT Crop Recommendation Results
+    Test Accuracy : 63.41%
+    Precision (w) : 61.19%
+    Recall    (w) : 63.41%
+    F1-score  (w) : 59.94%
+
+  Saving SwiFT artefacts...
+    saved  swift_crop_model.pth                                    284.9 KB
+    saved  swift_crop_config.joblib                                  0.1 KB
+    saved  swift_crop_encoder.joblib                                 0.8 KB
+    saved  swift_crop_scaler.joblib                                  0.9 KB
+    saved  swift_crop_feature_names.joblib                           0.1 KB
+
+── Model 2: TTL Irrigation Advice ─────────────────────────
+    saved  ttl_irrig_crop_encoder.joblib                             0.7 KB
+    saved  ttl_irrig_stage_encoder.joblib                            0.5 KB
+  Generated Irrigation_dataset.csv  (10000 rows, 5 classes)
+    0: No Irrig                1069  (10.7%)
+    1: Irrig Recommended       4101  (41.0%)
+    2: Highly Recommended      2497  (25.0%)
+    3: Very Dry                1570  (15.7%)
+    4: Immediate                763  (7.6%)
+  Features: 9 numerical + 2 categorical  |  Samples: 10000
+    Epoch  10/60  val_acc=97.25%  best=97.25%
+    Epoch  20/60  val_acc=96.67%  best=97.92%
+    Epoch  30/60  val_acc=98.17%  best=98.17%
+    Epoch  40/60  val_acc=97.75%  best=98.17%
+    Epoch  50/60  val_acc=97.92%  best=98.75%
+    Early stop at epoch 57
+    Best validation accuracy: 98.75%
+
+  TTL Irrigation Results
+    Test Accuracy : 98.85%
+    Precision (w) : 98.86%
+    Recall    (w) : 98.85%
+    F1-score  (w) : 98.85%
+
+  Saving TTL artefacts...
+    saved  ttl_irrigation_model.pth                                421.9 KB
+    saved  ttl_irrigation_config.joblib                              0.1 KB
+    saved  ttl_irrigation_scaler.joblib                              0.8 KB
+    saved  ttl_irrigation_labels.joblib                              0.2 KB
+    saved  ttl_irrigation_num_features.joblib                        0.1 KB
+
+── Model 3: TabNet Soil Fertility ─────────────────────────
+  Generated Soil_Fertility.csv  (3000 rows)
+    Medium  :  2311  (77.0%)
+    High    :   524  (17.5%)
+    Low     :   165  (5.5%)
+  Classes: ['High', 'Low', 'Medium']  |  Samples: 3000
+
+Early stopping occurred at epoch 44 with best_epoch = 29 and best_val_0_accuracy = 0.86944
+
+  TabNet Soil Fertility Results
+    Test Accuracy : 85.17%
+    Precision (w) : 84.20%
+    Recall    (w) : 85.17%
+    F1-score  (w) : 84.29%
+
+  Saving TabNet Soil artefacts...
+Successfully saved model at C:\Users\MUKESH\Desktop\smart-agriculture-iot\backend\ml\saved_models\tabnet_soil_model.zip
+    saved  tabnet_soil_model.zip
+    saved  soil_fertility_encoder.joblib                             0.5 KB
+    saved  soil_feature_scaler.joblib                                0.7 KB
+    saved  soil_feature_names.joblib                                 0.0 KB
+    saved  soil_lime_background.joblib                               4.1 KB
+
+── Model 4: TabNet Fertilizer Recommendation ──────────────
+  Loaded Fertilizer_Prediction.csv  (6000 rows)
+  Fertilizers (7): ['10-26-26', '14-35-14', '17-17-17', '20-20', '28-28', 'DAP', 'Urea']
+  Features: 8   Samples: 6000
+Stop training because you reached max_epochs = 100 with best_epoch = 99 and best_val_0_accuracy = 0.96667
+
+  TabNet Fertilizer Results
+    Test Accuracy : 96.75%
+    Precision (w) : 96.83%
+    Recall    (w) : 96.75%
+    F1-score  (w) : 96.73%
+
+  Saving TabNet Fertilizer artefacts...
+Successfully saved model at C:\Users\MUKESH\Desktop\smart-agriculture-iot\backend\ml\saved_models\tabnet_fert_model.zip
+    saved  tabnet_fert_model.zip
+    saved  fert_label_encoder.joblib                                 0.6 KB
+    saved  fert_feature_scaler.joblib                                0.8 KB
+    saved  fert_soil_type_encoder.joblib                             0.6 KB
+    saved  fert_crop_type_encoder.joblib                             0.7 KB
+    saved  fert_feature_names.joblib                                 0.1 KB
+    saved  fert_lime_background.joblib                               6.5 KB
+
+=================================================================
+  Phase 8 Training Complete
+=================================================================
+  crop_feature_names.joblib                                    0.1 KB
+  crop_feature_scaler.joblib                                   0.9 KB
+  crop_label_encoder.joblib                                    0.8 KB
+  crop_recommendation_model.joblib                         24029.3 KB
+  crop_type_encoder.joblib                                     0.7 KB
+  fert_crop_type_encoder.joblib                                0.7 KB
+  fert_feature_names.joblib                                    0.1 KB
+  fert_feature_scaler.joblib                                   0.8 KB
+  fert_label_encoder.joblib                                    0.6 KB
+  fert_lime_background.joblib                                  6.5 KB
+  fert_soil_type_encoder.joblib                                0.6 KB
+  fertilizer_feature_names.joblib                              0.2 KB
+  fertilizer_feature_scaler.joblib                             0.9 KB
+  fertilizer_label_encoder.joblib                              0.6 KB
+  fertilizer_recommendation_model.joblib                   242013.4 KB
+  irrig_crop_encoder.joblib                                    0.7 KB
+  irrig_stage_encoder.joblib                                   0.5 KB
+  irrigation_feature_names.joblib                              0.1 KB
+  irrigation_feature_scaler.joblib                             0.8 KB
+  irrigation_label_encoder.joblib                              0.5 KB
+  irrigation_recommendation_model.joblib                   34542.5 KB
+  soil_feature_names.joblib                                    0.0 KB
+  soil_feature_scaler.joblib                                   0.7 KB
+  soil_fertility_encoder.joblib                                0.5 KB
+  soil_lime_background.joblib                                  4.1 KB
+  soil_type_encoder.joblib                                     0.6 KB
+  swift_crop_config.joblib                                     0.1 KB
+  swift_crop_encoder.joblib                                    0.8 KB
+  swift_crop_feature_names.joblib                              0.1 KB
+  swift_crop_model.pth                                       284.9 KB
+  swift_crop_scaler.joblib                                     0.9 KB
+  tabnet_fert_model.zip                                      385.9 KB
+  tabnet_soil_model.zip                                      382.7 KB
+  ttl_irrig_crop_encoder.joblib                                0.7 KB
+  ttl_irrig_stage_encoder.joblib                               0.5 KB
+  ttl_irrigation_config.joblib                                 0.1 KB
+  ttl_irrigation_labels.joblib                                 0.2 KB
+  ttl_irrigation_model.pth                                   421.9 KB
+  ttl_irrigation_num_features.joblib                           0.1 KB
+  ttl_irrigation_scaler.joblib                                 0.8 KB
+
+All models saved. Restart FastAPI to load new models.
+=================================================================
