@@ -2,12 +2,14 @@
 # app/routes/recommendation_routes.py — ML Recommendation API
 #
 # Endpoints:
-#   GET  /api/recommend/full          → all 3 recommendations at once
+#   GET  /api/recommend/full          → all 4 recommendations at once
 #                                       (uses live sensor + weather data)
 #   POST /api/recommend/crop          → crop recommendation (manual input)
 #   POST /api/recommend/fertilizer    → fertilizer recommendation
-#   POST /api/recommend/irrigation    → irrigation recommendation
+#   POST /api/recommend/irrigation    → irrigation recommendation (crop-aware)
 #   GET  /api/recommend/status        → ML models load status
+#   POST /api/recommend/soil          → soil fertility analysis (Low/Med/High)
+#   POST /api/recommend/explain       → LIME XAI explanation
 # =============================================================
 
 import logging
@@ -366,8 +368,8 @@ async def recommend_irrigation(request: IrrigationRecommendationRequest):
         humidity      = humidity,
         ph            = ph,
         rainfall_mm   = rainfall_mm,
-        crop_type     = request.crop_type or "Wheat",
-        growth_stage  = request.growth_stage or "mid_season",
+        crop_type     = request.crop_type,
+        growth_stage  = request.growth_stage,
         crop_aware    = request.crop_aware,
     )
 
@@ -443,10 +445,12 @@ async def get_explanation(request: ExplainRequest):
             potassium=request.potassium, ph=request.ph,
             moisture=request.moisture, explain=True,
         )
+        if result is None:
+            raise HTTPException(status_code=500, detail="Soil fertility prediction failed.")
         return {
             "model": "soil_fertility",
-            "prediction": result.fertility_class if result else None,
-            "explanation": result.explanation if result else None,
+            "prediction": result.fertility_class,
+            "explanation": result.explanation,
         }
 
     if request.model_type == "fertilizer":
@@ -457,10 +461,12 @@ async def get_explanation(request: ExplainRequest):
             potassium=request.potassium, phosphorus=request.phosphorus,
             explain=True,
         )
+        if result is None:
+            raise HTTPException(status_code=500, detail="Fertilizer prediction failed.")
         return {
             "model": "fertilizer",
-            "prediction": result.fertilizer if result else None,
-            "explanation": result.explanation if result else None,
+            "prediction": result.fertilizer,
+            "explanation": result.explanation,
         }
 
     raise HTTPException(status_code=400, detail="model_type must be 'fertilizer' or 'soil'")

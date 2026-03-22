@@ -3,7 +3,7 @@
 # =============================================================
 
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import Optional
 
 
 # ── Weather Models ────────────────────────────────────────────
@@ -136,23 +136,6 @@ class IrrigationRecommendationResponse(BaseModel):
     weather_used:    bool = False
 
 
-class FullRecommendationResponse(BaseModel):
-    """
-    Combined response from GET /api/recommend/full
-    Runs all three models in one call using latest sensor + weather data.
-    This is the primary endpoint for the farmer dashboard.
-    """
-    sensor_data_used:  Optional[dict]
-    weather_data_used: Optional[dict]
-    crop:              Optional[CropRecommendationResponse]
-    fertilizer:        Optional[FertilizerRecommendationResponse]
-    irrigation:        Optional[IrrigationRecommendationResponse]
-    soil:              Optional["SoilFertilityResponse"] = None
-    ml_ready:          bool
-    weather_available: bool
-    warnings:          list[str] = []
-
-
 # ── Soil Fertility Models ─────────────────────────────────────
 
 class SoilFertilityRequest(BaseModel):
@@ -175,13 +158,30 @@ class SoilFertilityResponse(BaseModel):
 
 
 class ExplainRequest(BaseModel):
-    model_type:  str             = Field(..., description="'fertilizer' or 'soil'")
-    nitrogen:    Optional[float] = Field(60.0)
-    phosphorus:  Optional[float] = Field(40.0)
-    potassium:   Optional[float] = Field(40.0)
-    ph:          Optional[float] = Field(6.5)
-    moisture:    Optional[float] = Field(50.0)
-    temperature: Optional[float] = Field(25.0)
-    humidity:    Optional[float] = Field(60.0)
-    soil_type:   Optional[str]   = Field("Loamy")
-    crop_type:   Optional[str]   = Field("Wheat")
+    model_type:  str   = Field(..., description="'fertilizer' or 'soil'")
+    nitrogen:    float = Field(60.0)
+    phosphorus:  float = Field(40.0)
+    potassium:   float = Field(40.0)
+    ph:          float = Field(6.5)
+    moisture:    float = Field(50.0)
+    temperature: float = Field(25.0)
+    humidity:    float = Field(60.0)
+    soil_type:   str   = Field("Loamy")
+    crop_type:   str   = Field("Wheat")
+
+
+class FullRecommendationResponse(BaseModel):
+    """
+    Combined response from GET /api/recommend/full
+    Runs all four models in one call using latest sensor + weather data.
+    This is the primary endpoint for the farmer dashboard.
+    """
+    sensor_data_used:  Optional[dict]
+    weather_data_used: Optional[dict]
+    crop:              Optional[CropRecommendationResponse]
+    fertilizer:        Optional[FertilizerRecommendationResponse]
+    irrigation:        Optional[IrrigationRecommendationResponse]
+    soil:              Optional[SoilFertilityResponse] = None
+    ml_ready:          bool
+    weather_available: bool
+    warnings:          list[str] = []
