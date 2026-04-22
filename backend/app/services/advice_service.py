@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 
 @dataclass
@@ -44,15 +44,14 @@ def _call_gemini(prompt_en: str, prompt_np: str) -> Optional[tuple[str, str]]:
         logger.info("[Advice] No GEMINI_API_KEY configured, using templates.")
         return None
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(GEMINI_MODEL)
+        from google import genai
+        client = genai.Client(api_key=api_key)
 
-        resp_en = model.generate_content(prompt_en)
-        resp_np = model.generate_content(prompt_np)
+        resp_en = client.models.generate_content(model=GEMINI_MODEL, contents=prompt_en)
+        resp_np = client.models.generate_content(model=GEMINI_MODEL, contents=prompt_np)
 
-        en = resp_en.text.strip() if resp_en.text else ""
-        np_text = resp_np.text.strip() if resp_np.text else ""
+        en = (resp_en.text or "").strip()
+        np_text = (resp_np.text or "").strip()
 
         if en and np_text:
             return en, np_text
