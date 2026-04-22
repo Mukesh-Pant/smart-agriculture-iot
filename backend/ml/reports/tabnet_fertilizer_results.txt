@@ -1,0 +1,14 @@
+TabNet Fertilizer Results
+Accuracy: 98.33%
+
+              precision    recall  f1-score   support
+
+     Compost       1.00      0.99      0.99       875
+         DAP       0.64      0.90      0.75        10
+         MOP       0.92      0.97      0.94        58
+NPK 20-20-20       0.98      0.97      0.98       178
+        Urea       0.93      0.99      0.96        79
+
+    accuracy                           0.98      1200
+   macro avg       0.89      0.96      0.92      1200
+weighted avg       0.98      0.98      0.98      1200

@@ -1,0 +1,23 @@
+SwiFT Crop Recommendation Results
+Accuracy: 77.14%
+
+              precision    recall  f1-score   support
+
+       apple       0.94      1.00      0.97        15
+      banana       0.93      0.87      0.90        15
+   blackgram       0.77      0.67      0.71        15
+    chickpea       0.83      1.00      0.91        15
+        jute       0.65      0.73      0.69        15
+ kidneybeans       0.80      0.80      0.80        15
+      lentil       0.40      0.40      0.40        15
+       maize       0.67      0.80      0.73        15
+       mango       0.72      0.87      0.79        15
+    mungbean       0.73      0.73      0.73        15
+      orange       1.00      0.73      0.85        15
+  pigeonpeas       0.75      0.40      0.52        15
+        rice       0.80      0.80      0.80        15
+  watermelon       0.88      1.00      0.94        15
+
+    accuracy                           0.77       210
+   macro avg       0.78      0.77      0.77       210
+weighted avg       0.78      0.77      0.77       210

@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     ML_DATASETS_DIR:     str   = "ml/datasets"
     ML_MIN_CONFIDENCE:   float = 0.45
 
+    # ── Gemini AI (Phase 9) ───────────────────────────────────
+    GEMINI_API_KEY:      str   = ""
+
 
 # Single instance imported everywhere
 settings = Settings()

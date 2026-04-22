@@ -29,6 +29,19 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true,
         default: "farmer"
+    },
+    district: {
+        type: String,
+        default: null
+    },
+    region: {
+        type: String,
+        enum: ["Terai", "Mid-hills", "Hilly", "Mountain", null],
+        default: null
+    },
+    phone: {
+        type: String,
+        default: null
     }
 }, {
     timestamps: true

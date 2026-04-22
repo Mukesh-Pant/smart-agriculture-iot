@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 const API_BASE_URL = "http://localhost:8000";
+export const BACKEND_URL = API_BASE_URL;
 
 async function request(path, options = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -42,6 +43,29 @@ export const postFertilizerRecommendation = (body) =>
 
 export const postIrrigationRecommendation = (body) =>
   request("/api/recommend/irrigation", { method: "POST", body: JSON.stringify(body) });
+
+// ── Soil + Explain ────────────────────────────────────────────
+export const postSoilFertility = (body) =>
+  request("/api/recommend/soil", { method: "POST", body: JSON.stringify(body) });
+
+export const postExplain = (body) =>
+  request("/api/recommend/explain", { method: "POST", body: JSON.stringify(body) });
+
+// ── On-demand Advice (Gemini) ─────────────────────────────────
+export const postAdvice = (body) =>
+  request("/api/recommend/advice", { method: "POST", body: JSON.stringify(body) });
+
+// ── PDF Report ────────────────────────────────────────────────
+export const postGenerateReport = (body) =>
+  fetch(`${API_BASE_URL}/api/recommend/report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+// ── Recommendation History ────────────────────────────────────
+export const getRecommendHistory = (userId, page = 1) =>
+  request(`/api/recommend/history?${userId ? `user_id=${userId}&` : ""}page=${page}`);
 
 // ── Health ────────────────────────────────────────────────────
 export const getHealth = () => request("/health");

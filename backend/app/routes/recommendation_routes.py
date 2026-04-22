@@ -470,3 +470,209 @@ async def get_explanation(request: ExplainRequest):
         }
 
     raise HTTPException(status_code=400, detail="model_type must be 'fertilizer' or 'soil'")
+
+
+# ── /advice — On-demand Gemini bilingual advice ───────────────
+
+from pydantic import BaseModel as _BaseModel
+from typing import Literal as _Literal, Any as _Any
+from datetime import datetime as _datetime
+
+
+class AdviceRequest(_BaseModel):
+    advice_type: _Literal["crop", "fertilizer", "irrigation", "soil"]
+    # Crop fields
+    crop:        Optional[str]   = None
+    confidence:  Optional[float] = None
+    # Shared soil fields
+    nitrogen:    Optional[float] = 60.0
+    phosphorus:  Optional[float] = 40.0
+    potassium:   Optional[float] = 40.0
+    ph:          Optional[float] = 6.5
+    moisture:    Optional[float] = 50.0
+    # Climate fields
+    temperature: Optional[float] = 25.0
+    humidity:    Optional[float] = 65.0
+    rainfall:    Optional[float] = 100.0
+    # Fertilizer specific
+    fertilizer:  Optional[str]   = None
+    soil_type:   Optional[str]   = "Loamy"
+    crop_type:   Optional[str]   = "Rice"
+    # Irrigation specific
+    soil_moisture:    Optional[float] = 50.0
+    irrigation_class: Optional[int]   = 1
+    irrigation_action: Optional[str]  = None
+    # Soil fertility
+    fertility_class: Optional[str] = None
+    # User info for saving
+    user_id: Optional[str] = None
+    device_id: Optional[str] = None
+
+
+@router.post("/advice", summary="On-demand bilingual advice (Gemini + offline fallback)")
+async def get_advice(request: AdviceRequest):
+    """
+    Called ONLY when the farmer clicks 'Get Detailed Advice'.
+    Returns bilingual (English + Nepali) structured advice from Gemini Flash.
+    Falls back to offline templates if API is unavailable.
+    """
+    from app.services.advice_service import (
+        get_crop_advice, get_fertilizer_advice,
+        get_irrigation_advice, get_soil_advice
+    )
+
+    t = request.advice_type
+
+    if t == "crop":
+        if not request.crop:
+            raise HTTPException(400, "crop field is required for crop advice")
+        result = get_crop_advice(
+            crop=request.crop,
+            confidence=request.confidence or 0.0,
+            nitrogen=request.nitrogen, phosphorus=request.phosphorus,
+            potassium=request.potassium, temperature=request.temperature,
+            humidity=request.humidity, ph=request.ph, rainfall=request.rainfall,
+        )
+
+    elif t == "fertilizer":
+        if not request.fertilizer:
+            raise HTTPException(400, "fertilizer field is required")
+        result = get_fertilizer_advice(
+            fertilizer=request.fertilizer,
+            confidence=request.confidence or 0.0,
+            nitrogen=request.nitrogen, phosphorus=request.phosphorus,
+            potassium=request.potassium,
+            crop_type=request.crop_type, soil_type=request.soil_type,
+        )
+
+    elif t == "irrigation":
+        result = get_irrigation_advice(
+            irrigation_class=request.irrigation_class or 1,
+            action=request.irrigation_action or "Irrigation Recommended",
+            confidence=request.confidence or 0.0,
+            soil_moisture=request.soil_moisture or request.moisture,
+            temperature=request.temperature,
+            crop_type=request.crop_type or "Rice",
+        )
+
+    elif t == "soil":
+        if not request.fertility_class:
+            raise HTTPException(400, "fertility_class field is required")
+        result = get_soil_advice(
+            fertility_class=request.fertility_class,
+            confidence=request.confidence or 0.0,
+            nitrogen=request.nitrogen, phosphorus=request.phosphorus,
+            potassium=request.potassium, ph=request.ph, moisture=request.moisture,
+        )
+    else:
+        raise HTTPException(400, "Invalid advice_type")
+
+    return {
+        "advice_type": t,
+        "advice_en":   result.advice_en,
+        "advice_np":   result.advice_np,
+        "source":      result.source,
+        "generated_at": _datetime.utcnow().isoformat(),
+    }
+
+
+# ── /history — Recommendation history (RBAC) ─────────────────
+
+from fastapi import Query as _Query
+
+
+@router.get("/history", summary="Get recommendation history (per-user or all for admin)")
+async def get_recommendation_history(
+    user_id:  Optional[str] = _Query(None, description="Filter by user_id"),
+    page:     int           = _Query(1, ge=1),
+    per_page: int           = _Query(20, ge=1, le=100),
+):
+    """
+    Returns paginated recommendation history from MongoDB.
+    - Regular user: pass their own user_id to see their history.
+    - Admin: omit user_id to see all history.
+    RBAC is enforced at the frontend via JWT role check.
+    """
+    try:
+        from app.database.repository import repository
+        skip = (page - 1) * per_page
+
+        query: dict = {}
+        if user_id:
+            query["user_id"] = user_id
+
+        records = await repository.get_recommendation_history(
+            query=query, skip=skip, limit=per_page
+        )
+        total = await repository.count_recommendations(query=query)
+
+        return {
+            "page":     page,
+            "per_page": per_page,
+            "total":    total,
+            "records":  records,
+        }
+    except Exception as e:
+        logger.error(f"[History] Failed: {e}")
+        raise HTTPException(500, f"History fetch failed: {e}")
+
+
+@router.get("/history/{report_id}", summary="Get a single recommendation report by ID")
+async def get_recommendation_by_id(report_id: str):
+    """Returns one recommendation record by report_id (AGS-YYYYMMDD-XXXX format)."""
+    try:
+        from app.database.repository import repository
+        record = await repository.get_recommendation_by_report_id(report_id)
+        if record is None:
+            raise HTTPException(404, f"Report {report_id} not found")
+        return record
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[History] get_by_id failed: {e}")
+        raise HTTPException(500, str(e))
+
+
+# ── /report — PDF generation ──────────────────────────────────
+
+class ReportRequest(_BaseModel):
+    report_id:   Optional[str] = None
+    farmer_name: Optional[str] = "Farmer"
+    device_id:   Optional[str] = None
+    district:    Optional[str] = None
+    region:      Optional[str] = None
+    crop:        Optional[str] = None
+    fertilizer:  Optional[str] = None
+    soil_class:  Optional[str] = None
+    irrigation:  Optional[str] = None
+    advice_en:   Optional[str] = None
+    advice_np:   Optional[str] = None
+    input_data:  Optional[dict] = None
+    language:    _Literal["en", "np", "both"] = "both"
+
+
+from fastapi.responses import StreamingResponse as _StreamingResponse
+import io as _io
+
+
+@router.post("/report", summary="Generate PDF farm report (xhtml2pdf)")
+async def generate_report(request: ReportRequest):
+    """
+    Generates a professional bilingual PDF farm report.
+    Returns binary PDF stream for direct browser download.
+    """
+    try:
+        from app.services.pdf_service import generate_pdf
+        pdf_bytes = await generate_pdf(request.dict())
+        return _StreamingResponse(
+            _io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="AgriSense_Report_{request.report_id or "farm"}.pdf"'
+                )
+            }
+        )
+    except Exception as e:
+        logger.error(f"[PDF] Generation failed: {e}")
+        raise HTTPException(500, f"PDF generation failed: {e}")

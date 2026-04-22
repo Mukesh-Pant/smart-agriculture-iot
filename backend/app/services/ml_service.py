@@ -77,39 +77,34 @@ class SoilFertilityResult:
 # ── Advice Templates ──────────────────────────────────────────
 
 CROP_ADVICE = {
-    "rice":        "Rice thrives in waterlogged conditions. Ensure adequate irrigation.",
-    "maize":       "Maize needs well-drained soil. Avoid waterlogging.",
-    "wheat":       "Wheat prefers cooler temperatures and moderate moisture.",
-    "chickpea":    "Chickpea prefers dry conditions. Reduce irrigation frequency.",
-    "kidneybeans": "Kidney beans need consistent moisture. Monitor soil regularly.",
-    "pigeonpeas":  "Pigeon peas are drought-tolerant. Water sparingly.",
-    "mothbeans":   "Moth beans are drought-resistant. Minimal irrigation needed.",
-    "mungbean":    "Mung beans need moderate water. Avoid overwatering.",
-    "blackgram":   "Black gram grows best in warm, humid conditions.",
-    "lentil":      "Lentils prefer cool weather. Plant in early winter.",
-    "pomegranate": "Pomegranate is drought-tolerant once established.",
-    "banana":      "Banana needs high moisture. Irrigate frequently.",
-    "mango":       "Mango trees prefer dry spells before flowering.",
-    "grapes":      "Grapes need well-drained soil. Avoid excess moisture.",
-    "watermelon":  "Watermelons need consistent moisture during fruiting.",
-    "muskmelon":   "Muskmelons need warm weather and moderate irrigation.",
-    "apple":       "Apple trees need deep, well-drained, fertile soil.",
-    "orange":      "Orange trees need regular watering and warm climate.",
-    "papaya":      "Papaya grows best in warm, humid conditions.",
-    "coconut":     "Coconut palms thrive near coastal areas.",
-    "cotton":      "Cotton prefers hot, dry conditions with moderate rainfall.",
-    "jute":        "Jute thrives in warm, humid conditions with heavy rainfall.",
-    "coffee":      "Coffee needs shade, humidity, and well-drained acidic soil.",
+    # Terai belt crops
+    "rice":        "Rice thrives in waterlogged conditions. Transplant in June–July. Ensure 5–7 cm standing water during tillering.",
+    "wheat":       "Wheat prefers cool temperatures (15–22°C). Sow in October–November. Timely irrigation at crown root initiation is critical.",
+    "maize":       "Maize needs well-drained fertile soil. Plant in March or June. Avoid waterlogging at any stage.",
+    "mustard":     "Mustard grows well in cool dry conditions. Sow in October–November. Requires minimal irrigation in Terai.",
+    "jute":        "Jute thrives in warm humid Terai conditions. Needs heavy rainfall (1500–2000 mm). Sow in April–May.",
+    "lentil":      "Lentils prefer cool dry weather. Sow in November. Drought-tolerant; one irrigating at pod-filling improves yield.",
+    "chickpea":    "Chickpea needs dry conditions after sowing. Avoid excess moisture. Well-suited for Terai winter season.",
+    "blackgram":   "Black gram grows best in warm humid Terai. Sow in June–July. Ensure good drainage to prevent root rot.",
+    "mungbean":    "Mung beans need moderate water. Sow in March or June. Short-duration crop (60–65 days) suitable for Terai.",
+    "pigeonpeas":  "Pigeon peas are drought-tolerant. Suitable for mid-hills and inner Terai. Sow in May–June.",
+    "kidneybeans": "Kidney beans need consistent moisture. Grow in mid-hills (800–2000m). Monitor soil moisture at flowering.",
+    "soybean":     "Soybean needs warm humid conditions. Sow in June–July in Terai. Fix atmospheric nitrogen; reduces fertilizer need.",
+    "banana":      "Banana needs high moisture and warm temperatures. Ideal for Terai lowlands. Irrigate twice weekly in dry season.",
+    "watermelon":  "Watermelon needs warm weather and consistent moisture at fruiting. Grow in sandy loam Terai soils.",
+    # Mid-hills crops
+    "potato":      "Potato grows best at 15–20°C in mid-hills. Plant in September–October or February. Well-drained loam soil essential.",
+    "mango":       "Mango trees prefer warm dry conditions with a cool dry spell before flowering. Terai and lower mid-hills.",
+    "apple":       "Apple requires chilling hours (<7°C). Best suited for mid-hills above 1500m (Mustang, Jumla). Well-drained soil.",
+    "orange":      "Orange grows well in mid-hills (300–1500m). Requires regular watering and warm climate. Citrus-friendly pH 6–7.",
 }
 
 FERTILIZER_ADVICE = {
-    "Urea":     "Apply Urea for nitrogen deficiency. Use 45–60 kg/ha. Avoid over-application.",
-    "DAP":      "DAP provides nitrogen and phosphorus. Apply at sowing time.",
-    "14-35-14": "Balanced NPK fertilizer. Apply during active growth phase.",
-    "28-28":    "High N and P formula. Suitable for nitrogen-deficient crops.",
-    "17-17-17": "Equal NPK ratio. Good general-purpose fertilizer.",
-    "20-20":    "Nitrogen and phosphorus blend. Apply before planting.",
-    "10-26-26": "High phosphorus and potassium. Good for root development.",
+    "Urea":          "Apply Urea (46% N) for nitrogen deficiency. Use 45–60 kg/ha in split doses. Top-dress at tillering and panicle initiation.",
+    "DAP":           "DAP (18-46-0) provides nitrogen and phosphorus. Apply at sowing time, 50–100 kg/ha. Ideal for phosphorus-deficient soils.",
+    "MOP":           "MOP (Muriate of Potash, 60% K₂O) corrects potassium deficiency. Apply 40–60 kg/ha at sowing. Improves crop quality.",
+    "NPK 20-20-20":  "Balanced NPK 20-20-20 for soils deficient in all macronutrients. Apply 100–150 kg/ha. Good for vegetables and fruits.",
+    "Compost":       "Compost improves soil organic matter and microbial activity. Apply 5–10 tonnes/ha. Best for long-term soil health.",
 }
 
 IRRIGATION_ADVICE = [
@@ -128,11 +123,11 @@ SOIL_ADVICE = {
     "High":   "Soil fertility is HIGH. Excellent conditions for most crops. Monitor for nutrient imbalances.",
 }
 
-# FAO-56 crop coefficients for irrigation calculation
+# FAO-56 crop coefficients for irrigation calculation (Nepal crops)
 _CROP_KC = {
-    "Wheat":1.15, "Rice":1.20, "Maize":1.20, "Cotton":1.15,
-    "Sugarcane":1.25, "Vegetables":1.05, "Fruits":0.90,
-    "Pulses":1.05, "Groundnut":1.15,
+    "Wheat":1.15, "Rice":1.20, "Maize":1.20, "Potato":1.15,
+    "Mustard":1.05, "Vegetables":1.05, "Fruits":0.90,
+    "Pulses":1.05, "Soybean":1.10,
 }
 _STAGE_MOD = {
     "initial":0.80, "development":1.00, "mid_season":1.15, "late_season":0.85

@@ -166,6 +166,7 @@ htmlcov/
 # Documentation builds
 docs/_build/
 site/
+.claude/
 
 # Backup files
 *.bak

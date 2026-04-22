@@ -328,14 +328,15 @@ import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import toast from "react-hot-toast";
 import { z } from "zod";
-import { 
-  User, 
-  Fingerprint, 
-  Shield, 
+import {
+  User,
+  Fingerprint,
+  Shield,
   Loader2,
   Sparkles,
-  ChevronRight,
-  ArrowRight
+  ArrowRight,
+  MapPin,
+  Phone,
 } from "lucide-react";
 
 import BackendApi from "../(dashboard)/_components/Common";
@@ -557,6 +558,79 @@ export default function OnboardingPage() {
                   </Select>
                 )}
               />
+            </div>
+
+            {/* Optional: District + Region + Phone */}
+            <div className="space-y-3 pt-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600 flex items-center gap-1.5">
+                <MapPin className="w-3 h-3" />
+                Location & Contact (optional)
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* District */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    District
+                  </Label>
+                  <Input
+                    {...register("district")}
+                    placeholder="Kanchanpur"
+                    disabled={isLoading}
+                    className="h-10 text-sm rounded-xl border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-green-500/20 focus:border-green-500 hover:border-green-300 dark:hover:border-green-700 transition-all duration-200"
+                  />
+                  {errors.district && (
+                    <p className="text-[10px] text-red-500">{errors.district.message}</p>
+                  )}
+                </div>
+
+                {/* Phone */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-green-500" />
+                    Phone
+                  </Label>
+                  <Input
+                    {...register("phone")}
+                    type="tel"
+                    placeholder="+977 98XXXXXXXX"
+                    disabled={isLoading}
+                    className="h-10 text-sm rounded-xl border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-green-500/20 focus:border-green-500 hover:border-green-300 dark:hover:border-green-700 transition-all duration-200"
+                  />
+                  {errors.phone && (
+                    <p className="text-[10px] text-red-500">{errors.phone.message}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Region */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Region
+                </Label>
+                <Controller
+                  name="region"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ""}
+                      onValueChange={(v) => field.onChange(v || undefined)}
+                      disabled={isLoading}
+                    >
+                      <SelectTrigger className="w-full h-10 text-sm rounded-xl border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-green-500/20 focus:border-green-500 hover:border-green-300 dark:hover:border-green-700 transition-all duration-200">
+                        <SelectValue placeholder="Select region" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-gray-200 dark:border-gray-800">
+                        {["Terai", "Mid-hills", "Hilly", "Mountain"].map((r) => (
+                          <SelectItem key={r} value={r} className="cursor-pointer text-sm">
+                            {r}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
             </div>
 
             {/* Progress indicator */}

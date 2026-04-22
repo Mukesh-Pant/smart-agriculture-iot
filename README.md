@@ -30,9 +30,12 @@
 │     sensor_readings · recommendations · alerts · devices             │
 │          Schema validation · Compound indexes · TTL                  │
 │                                    ↓                                 │
-│         [Phase 8 Advanced ML Engine — PyTorch + TabNet]              │
+│       [Phase 8–9 Advanced ML Engine — PyTorch + TabNet + SMOTE]     │
 │   SwiFT (crop) · TTL (irrigation) · TabNet×2 (soil + fertilizer)    │
 │              LIME XAI explanations for all predictions               │
+│                                    ↓                                 │
+│         [Phase 9: Gemini 1.5 Flash — Bilingual EN/NP Advice]        │
+│          [Phase 9: xhtml2pdf PDF report generation (Jinja2)]        │
 │                                    ↓                                 │
 │                [OpenWeatherMap API integration]                      │
 └──────────────────────────────────────────────────────────────────────┘
@@ -64,6 +67,8 @@
 | ML Backend   | Python FastAPI + Uvicorn                                    | 0.115.5     |
 | Database     | MongoDB Atlas (cloud) via Motor async driver                | Motor 3.6   |
 | ML Models    | PyTorch · pytorch-tabnet · scikit-learn · LIME · SHAP       | PT 2.10     |
+| AI Advice    | Gemini 1.5 Flash · bilingual EN/NP · offline fallback       | —           |
+| PDF Reports  | xhtml2pdf · Jinja2 (pure-Python, Windows-compatible)        | 0.2.16      |
 | Auth Backend | Express.js + Mongoose + JWT                                 | Express 5   |
 | Auth         | NextAuth 5 (email magic links, MongoDB adapter)             | 5.x         |
 | Frontend     | Next.js + TypeScript + Tailwind CSS 4 + shadcn/ui + Recharts| Next 16    |
@@ -72,20 +77,24 @@
 
 ---
 
-## ML Models — Phase 8 (Advanced Deep Learning)
+## ML Models — Phase 8–9 (Advanced Deep Learning, Nepal Profiles)
 
-| Model | Architecture | Task | Features | Classes | Test Accuracy |
-|-------|-------------|------|----------|---------|---------------|
-| **SwiFT** | Sparse Weighted Fusion Transformer (custom PyTorch) | Crop recommendation | 13 | 22 crops | 63.4% |
-| **TTL** | FT-Transformer / Feature Tokenizer + Transformer | Irrigation advice | 9 num + 2 cat | 5 levels | **98.85%** |
-| **TabNet Soil** | pytorch-tabnet Classifier + LIME XAI | Soil fertility | 5 | Low/Med/High | **85.2%** |
-| **TabNet Fertilizer** | pytorch-tabnet Classifier + LIME XAI | Fertilizer choice | 8 | 7 fertilizers | **96.75%** |
+Phase 9 retrained all models with Nepal-specific crop profiles (18 crops) and SMOTE for fertilizer class imbalance (5780 → 21060 samples).
+
+| Model | Architecture | Task | Features | Classes | Phase 9 Accuracy |
+| --- | --- | --- | --- | --- | --- |
+| **SwiFT** | Sparse Weighted Fusion Transformer (PyTorch) | Crop recommendation | 13 | 18 Nepal crops | **77.14%** |
+| **TTL** | FT-Transformer (Feature Tokenizer + Transformer) | Irrigation advice | 9 num + 2 cat | 5 levels | **98.47%** |
+| **TabNet Soil** | pytorch-tabnet + LIME XAI | Soil fertility | 5 | Low/Med/High | **98.67%** |
+| **TabNet Fertilizer** | pytorch-tabnet + LIME XAI | Fertilizer choice | 8 | 5 Nepal fertilizers | **98.33%** |
 
 ### Key ML Features
-- **Crop-aware irrigation (dual-mode):** SwiFT crop output is automatically chained into TTL irrigation in the `/full` endpoint, demonstrating an integrated ML pipeline
-- **LIME explainability:** `/soil` and `/explain` endpoints return feature importance weights (why the model made that prediction) — supports farmer transparency
+
+- **Nepal crop profiles:** 18 crops common to Terai/hills (rice, maize, wheat, sugarcane, jute, mustard, lentil, etc.)
+- **Crop-aware irrigation (dual-mode):** SwiFT crop output is automatically chained into TTL irrigation in the `/full` endpoint
+- **LIME explainability:** `/explain` endpoint returns feature importance weights for fertilizer or soil predictions
 - **FAO-56 ET0:** Hargreaves-Samani reference evapotranspiration used as a derived feature in the irrigation model
-- **5-class irrigation labels:** Sufficient → Moderate Recommended → Highly Recommended → Very Dry → Immediate
+- **SMOTE:** Synthetic Minority Oversampling balances the fertilizer dataset before training
 
 ---
 

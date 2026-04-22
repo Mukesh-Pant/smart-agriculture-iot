@@ -1,0 +1,12 @@
+TabNet Soil Fertility Results
+Accuracy: 98.67%
+
+              precision    recall  f1-score   support
+
+        High       0.99      0.99      0.99       208
+         Low       1.00      0.98      0.99       212
+      Medium       0.98      0.99      0.98       330
+
+    accuracy                           0.99       750
+   macro avg       0.99      0.99      0.99       750
+weighted avg       0.99      0.99      0.99       750

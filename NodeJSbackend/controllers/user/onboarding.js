@@ -15,7 +15,7 @@ async function userOnboarding(req, res) {
     const sessionToken = req.cookies["authjs.session-token"];
     // console.log("session-Token", sessionToken);
 
-    const { firstName, lastName, device_id, role } = req.body
+    const { firstName, lastName, device_id, role, district, region, phone } = req.body
     
     // const sessions = await db.collection("sessions").find().toArray();
     // console.log("All sessions:", sessions);
@@ -43,6 +43,9 @@ async function userOnboarding(req, res) {
           lastName,
           device_id,
           user_role: role,
+          ...(district !== undefined && { district }),
+          ...(region   !== undefined && { region }),
+          ...(phone    !== undefined && { phone }),
         },
         { returnDocument: "after" }
       );

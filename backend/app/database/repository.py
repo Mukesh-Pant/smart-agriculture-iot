@@ -9,6 +9,8 @@
 # =============================================================
 
 import logging
+import random
+import string
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -185,23 +187,38 @@ class RecommendationRepository:
         db = get_database()
         return db[settings.MONGO_COL_RECOMMENDATIONS] if db is not None else None
 
+    @staticmethod
+    def _make_report_id() -> str:
+        date_part = datetime.utcnow().strftime("%Y%m%d")
+        rand_part = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        return f"AGS-{date_part}-{rand_part}"
+
     async def save(
         self,
-        device_id:  str,
-        rec_type:   str,    # "crop" | "fertilizer" | "irrigation" | "full"
-        result:     dict,
-        confidence: Optional[float] = None,
+        device_id:    str,
+        rec_type:     str,
+        result:       dict,
+        confidence:   Optional[float] = None,
+        user_id:      Optional[str]   = None,
+        advice_en:    Optional[str]   = None,
+        advice_np:    Optional[str]   = None,
+        advice_source: Optional[str] = None,
     ) -> Optional[str]:
-        """Saves one ML recommendation to the recommendations collection."""
         if self._col is None:
             return None
         try:
             doc = {
-                "device_id":  device_id,
-                "created_at": datetime.utcnow(),
-                "type":       rec_type,
-                "result":     result,
-                "confidence": confidence,
+                "device_id":     device_id,
+                "user_id":       user_id,
+                "report_id":     self._make_report_id(),
+                "created_at":    datetime.utcnow(),
+                "type":          rec_type,
+                "result":        result,
+                "confidence":    confidence,
+                "advice_en":     advice_en,
+                "advice_np":     advice_np,
+                "advice_source": advice_source,
+                "pdf_generated": False,
             }
             res = await self._col.insert_one(doc)
             return str(res.inserted_id)
@@ -222,6 +239,44 @@ class RecommendationRepository:
         except Exception as e:
             logger.error(f"[RecommendationRepo] get_recent failed: {e}")
             return []
+
+    async def get_recommendation_history(
+        self, query: dict = None, skip: int = 0, limit: int = 20
+    ) -> list:
+        if self._col is None:
+            return []
+        try:
+            q = query or {}
+            cursor = (
+                self._col.find(q)
+                .sort("created_at", DESCENDING)
+                .skip(skip)
+                .limit(limit)
+            )
+            docs = await cursor.to_list(length=limit)
+            return [_serialize(d) for d in docs]
+        except Exception as e:
+            logger.error(f"[RecommendationRepo] get_history failed: {e}")
+            return []
+
+    async def count_recommendations(self, query: dict = None) -> int:
+        if self._col is None:
+            return 0
+        try:
+            return await self._col.count_documents(query or {})
+        except Exception as e:
+            logger.error(f"[RecommendationRepo] count failed: {e}")
+            return 0
+
+    async def get_recommendation_by_report_id(self, report_id: str) -> Optional[dict]:
+        if self._col is None:
+            return None
+        try:
+            doc = await self._col.find_one({"report_id": report_id})
+            return _serialize(doc) if doc else None
+        except Exception as e:
+            logger.error(f"[RecommendationRepo] get_by_report_id failed: {e}")
+            return None
 
 
 # =============================================================
@@ -333,3 +388,6 @@ sensor_repository         = SensorRepository()
 recommendation_repository = RecommendationRepository()
 alert_repository          = AlertRepository()
 device_repository         = DeviceRepository()
+
+# Unified facade used by recommendation_routes
+repository = recommendation_repository

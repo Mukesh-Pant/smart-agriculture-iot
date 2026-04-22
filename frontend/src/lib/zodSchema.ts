@@ -17,4 +17,14 @@ export const onboardingSchema = z.object({
     .string()
     .min(3, { message: "Add your ESP-32 microcontroller ID" })
     .max(20, { message: "Device ID max 20 characters" }),
+
+  district: z.string().max(50).optional(),
+
+  region: z.enum(["Terai", "Mid-hills", "Hilly", "Mountain"]).optional(),
+
+  phone: z
+    .string()
+    .regex(/^[0-9+\-\s]{7,15}$/, { message: "Enter a valid phone number" })
+    .optional()
+    .or(z.literal("")),
 });

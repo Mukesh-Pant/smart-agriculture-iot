@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>AgriSense Farm Report — {{ report_id }}</title>
+  <style>
+    /* Base */
+    @page {
+      size: A4;
+      margin: 18mm 15mm 18mm 15mm;
+      @frame header_frame {
+        -pdf-frame-content: header_content;
+        top: 10mm; left: 15mm; right: 15mm; height: 14mm;
+      }
+      @frame footer_frame {
+        -pdf-frame-content: footer_content;
+        bottom: 8mm; left: 15mm; right: 15mm; height: 9mm;
+      }
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 9.5pt;
+      color: #1a1a1a;
+      line-height: 1.45;
+    }
+
+    /* ── Header ── */
+    #header_content {
+      border-bottom: 2px solid #2d6a2d;
+      padding-bottom: 3px;
+    }
+    .header-logo {
+      font-size: 14pt;
+      font-weight: bold;
+      color: #2d6a2d;
+      display: inline-block;
+    }
+    .header-subtitle {
+      font-size: 8pt;
+      color: #666;
+      float: right;
+      margin-top: 4px;
+    }
+
+    /* ── Footer ── */
+    #footer_content {
+      border-top: 1px solid #ccc;
+      font-size: 7.5pt;
+      color: #888;
+      padding-top: 2px;
+    }
+    .footer-left  { float: left; }
+    .footer-right { float: right; }
+
+    /* ── Cover Banner ── */
+    .cover-banner {
+      background: linear-gradient(135deg, #2d6a2d 0%, #4a9e4a 50%, #d4a017 100%);
+      color: white;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      border-radius: 4px;
+    }
+    .cover-banner h1 {
+      margin: 0 0 2px 0;
+      font-size: 16pt;
+      letter-spacing: 1px;
+    }
+    .cover-banner .sub {
+      font-size: 9pt;
+      opacity: 0.88;
+    }
+
+    /* ── Farmer Info Table ── */
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 14px;
+      font-size: 9pt;
+    }
+    .info-table td {
+      padding: 4px 8px;
+      border: 1px solid #ddd;
+    }
+    .info-table td:first-child {
+      font-weight: bold;
+      color: #555;
+      background: #f5f5f5;
+      width: 30%;
+    }
+
+    /* ── Section Headers ── */
+    .section-header {
+      background-color: #2d6a2d;
+      color: white;
+      padding: 5px 10px;
+      font-size: 10.5pt;
+      font-weight: bold;
+      margin-top: 14px;
+      margin-bottom: 8px;
+      border-radius: 2px;
+    }
+    .section-header-np {
+      font-size: 9pt;
+      opacity: 0.85;
+      font-weight: normal;
+    }
+
+    /* ── Recommendation Cards ── */
+    .rec-card {
+      border: 1px solid #dce8dc;
+      border-left: 4px solid #2d6a2d;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      background: #fafffe;
+      border-radius: 2px;
+    }
+    .rec-card .rec-title {
+      font-weight: bold;
+      font-size: 10.5pt;
+      color: #2d6a2d;
+      margin-bottom: 3px;
+    }
+    .rec-card .rec-conf {
+      font-size: 8pt;
+      color: #888;
+      float: right;
+    }
+    .rec-card .rec-body {
+      font-size: 9pt;
+      color: #222;
+    }
+    .rec-card .rec-body-np {
+      font-size: 9pt;
+      color: #444;
+      border-top: 1px dashed #ccc;
+      margin-top: 5px;
+      padding-top: 5px;
+    }
+
+    /* ── Soil Data Mini-Table ── */
+    .soil-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.5pt;
+      margin-top: 4px;
+    }
+    .soil-table th {
+      background: #e8f4e8;
+      padding: 3px 6px;
+      border: 1px solid #c5dcc5;
+      text-align: center;
+      font-size: 8pt;
+    }
+    .soil-table td {
+      padding: 3px 6px;
+      border: 1px solid #ddd;
+      text-align: center;
+    }
+
+    /* ── Advice Box ── */
+    .advice-box {
+      background: #fffbf0;
+      border: 1px solid #d4a017;
+      border-left: 4px solid #d4a017;
+      padding: 8px 10px;
+      margin-top: 12px;
+      border-radius: 2px;
+    }
+    .advice-box .advice-title {
+      font-weight: bold;
+      font-size: 10pt;
+      color: #9a7212;
+      margin-bottom: 4px;
+    }
+    .advice-en { font-size: 9pt; color: #222; margin-bottom: 6px; }
+    .advice-np { font-size: 9pt; color: #444; border-top: 1px dashed #e0c060; padding-top: 5px; }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+      font-size: 7.5pt;
+      color: #999;
+      border-top: 1px solid #eee;
+      margin-top: 16px;
+      padding-top: 6px;
+      text-align: center;
+    }
+
+    /* ── Chip badges ── */
+    .badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 7.5pt;
+      font-weight: bold;
+    }
+    .badge-green  { background: #d1fae5; color: #065f46; }
+    .badge-yellow { background: #fef3c7; color: #92400e; }
+    .badge-red    { background: #fee2e2; color: #7f1d1d; }
+    .badge-blue   { background: #dbeafe; color: #1e3a8a; }
+
+    /* ── Clearfix ── */
+    .clearfix::after { content: ""; display: table; clear: both; }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER (repeated on all pages) ── -->
+<div id="header_content">
+  <span class="header-logo">🌱 AgriSense</span>
+  <span class="header-subtitle">Smart Agriculture Monitoring System &nbsp;|&nbsp; Far Western University</span>
+</div>
+
+<!-- ── FOOTER (repeated on all pages) ── -->
+<div id="footer_content">
+  <span class="footer-left">Report ID: {{ report_id }} &nbsp;|&nbsp; Generated: {{ generated_at }}</span>
+  <span class="footer-right">AgriSense © 2025 &nbsp;|&nbsp; Confidential Farm Report</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- COVER BANNER                                               -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="cover-banner">
+  <h1>AgriSense Farm Advisory Report</h1>
+  <div class="sub">AI-Powered Precision Agriculture &nbsp;·&nbsp; Nepal</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- FARMER DETAILS                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="section-header">
+  Farmer Information &nbsp;
+  <span class="section-header-np">किसान विवरण</span>
+</div>
+
+<table class="info-table">
+  <tr>
+    <td>Farmer Name</td>
+    <td>{{ farmer_name or "—" }}</td>
+    <td>Report ID</td>
+    <td><strong>{{ report_id }}</strong></td>
+  </tr>
+  <tr>
+    <td>Device ID</td>
+    <td>{{ device_id or "—" }}</td>
+    <td>Date Generated</td>
+    <td>{{ generated_at }}</td>
+  </tr>
+  {% if district or region %}
+  <tr>
+    <td>District / Region</td>
+    <td>{{ district or "—" }}</td>
+    <td>Agro-Zone</td>
+    <td>{{ region or "—" }}</td>
+  </tr>
+  {% endif %}
+</table>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SENSOR INPUT DATA                                          -->
+<!-- ══════════════════════════════════════════════════════════ -->
+{% if input_data %}
+<div class="section-header">
+  Sensor Readings Used &nbsp;
+  <span class="section-header-np">प्रयोग गरिएका सेन्सर डेटा</span>
+</div>
+
+<table class="soil-table">
+  <tr>
+    <th>N (mg/kg)</th>
+    <th>P (mg/kg)</th>
+    <th>K (mg/kg)</th>
+    <th>Temp (°C)</th>
+    <th>Humidity (%)</th>
+    <th>pH</th>
+    <th>Moisture (%)</th>
+    <th>Rainfall (mm)</th>
+  </tr>
+  <tr>
+    <td>{{ input_data.get('nitrogen', input_data.get('N', '—')) }}</td>
+    <td>{{ input_data.get('phosphorus', input_data.get('P', '—')) }}</td>
+    <td>{{ input_data.get('potassium', input_data.get('K', '—')) }}</td>
+    <td>{{ input_data.get('temperature', '—') }}</td>
+    <td>{{ input_data.get('humidity', '—') }}</td>
+    <td>{{ input_data.get('ph', input_data.get('pH', '—')) }}</td>
+    <td>{{ input_data.get('moisture', input_data.get('soil_moisture', '—')) }}</td>
+    <td>{{ input_data.get('rainfall', input_data.get('rainfall_mm', '—')) }}</td>
+  </tr>
+</table>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- ML RECOMMENDATIONS                                         -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="section-header">
+  ML Recommendations &nbsp;
+  <span class="section-header-np">एआई सिफारिसहरू</span>
+</div>
+
+{% if crop %}
+<div class="rec-card">
+  <div class="clearfix">
+    <span class="rec-title">🌾 Recommended Crop: {{ crop }}</span>
+    {% if crop_confidence %}
+    <span class="rec-conf badge badge-green">{{ "%.1f"|format(crop_confidence * 100) }}% confident</span>
+    {% endif %}
+  </div>
+  <div class="rec-body">
+    Suitability: Your soil and climate conditions are best matched for <strong>{{ crop }}</strong> cultivation.
+  </div>
+</div>
+{% endif %}
+
+{% if fertilizer %}
+<div class="rec-card">
+  <div class="clearfix">
+    <span class="rec-title">🧪 Recommended Fertilizer: {{ fertilizer }}</span>
+    {% if fertilizer_confidence %}
+    <span class="rec-conf badge badge-blue">{{ "%.1f"|format(fertilizer_confidence * 100) }}% confident</span>
+    {% endif %}
+  </div>
+  <div class="rec-body">
+    Nepal-available fertilizer best suited for current soil nutrient levels.
+  </div>
+</div>
+{% endif %}
+
+{% if soil_class %}
+<div class="rec-card">
+  <div class="clearfix">
+    <span class="rec-title">🌱 Soil Fertility:
+      {% if soil_class == 'High' %}
+        <span class="badge badge-green">{{ soil_class }}</span>
+      {% elif soil_class == 'Medium' %}
+        <span class="badge badge-yellow">{{ soil_class }}</span>
+      {% else %}
+        <span class="badge badge-red">{{ soil_class }}</span>
+      {% endif %}
+    </span>
+  </div>
+  <div class="rec-body">
+    TabNet soil fertility analysis based on N, P, K, pH, and moisture levels.
+  </div>
+</div>
+{% endif %}
+
+{% if irrigation %}
+<div class="rec-card">
+  <div class="clearfix">
+    <span class="rec-title">💧 Irrigation: {{ irrigation }}</span>
+  </div>
+</div>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- DETAILED ADVICE                                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+{% if advice_en or advice_np %}
+<div class="advice-box">
+  <div class="advice-title">
+    📋 Detailed Farming Advice &nbsp;|&nbsp; <span style="font-size:9pt;">विस्तृत खेती सल्लाह</span>
+  </div>
+  {% if advice_en %}
+  <div class="advice-en">
+    <strong>English:</strong><br/>{{ advice_en }}
+  </div>
+  {% endif %}
+  {% if advice_np %}
+  <div class="advice-np">
+    <strong>नेपाली:</strong><br/>{{ advice_np }}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- DISCLAIMER                                                 -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="disclaimer">
+  This report is generated by the AgriSense AI system and is intended for advisory purposes only.
+  Always consult your local Krishi Karyalaya (Agriculture Office) before making major farming decisions.
+  &nbsp;·&nbsp;
+  AgriSense — Bachelor of Computer Engineering, Far Western University, Mahendranagar, Nepal (2025)
+</div>
+
+</body>
+</html>

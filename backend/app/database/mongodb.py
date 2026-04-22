@@ -104,11 +104,17 @@ async def _apply_schema_validation() -> None:
             "bsonType": "object",
             "required": ["device_id", "created_at", "type"],
             "properties": {
-                "device_id":  {"bsonType": "string"},
-                "created_at": {"bsonType": "date"},
-                "type":       {"bsonType": "string", "enum": ["crop", "fertilizer", "irrigation", "full"]},
-                "result":     {"bsonType": "object"},
-                "confidence": {"bsonType": ["double", "null"]},
+                "device_id":     {"bsonType": "string"},
+                "user_id":       {"bsonType": ["string", "null"]},
+                "report_id":     {"bsonType": ["string", "null"]},
+                "created_at":    {"bsonType": "date"},
+                "type":          {"bsonType": "string", "enum": ["crop", "fertilizer", "irrigation", "full", "soil"]},
+                "result":        {"bsonType": "object"},
+                "confidence":    {"bsonType": ["double", "null"]},
+                "advice_en":     {"bsonType": ["string", "null"]},
+                "advice_np":     {"bsonType": ["string", "null"]},
+                "advice_source": {"bsonType": ["string", "null"]},
+                "pdf_generated": {"bsonType": ["bool", "null"]},
             }
         }
     }
@@ -212,11 +218,12 @@ async def _create_indexes() -> None:
     await _safe_create_index(sr, [("received_at", ASCENDING), ("device_id", ASCENDING)],    name="idx_time_asc_device")
     await _safe_create_index(sr, [("received_at", ASCENDING)], name="idx_ttl_90days",       expireAfterSeconds=7_776_000)
 
-    # ── recommendations ───────────────────────────────────────
+    # ── recommendations (no TTL — kept permanently for history) ─
     rc = db[settings.MONGO_COL_RECOMMENDATIONS]
     await _safe_create_index(rc, [("device_id", ASCENDING), ("created_at", DESCENDING)],    name="idx_rec_device_time")
+    await _safe_create_index(rc, [("user_id", ASCENDING), ("created_at", DESCENDING)],      name="idx_rec_user_time")
     await _safe_create_index(rc, [("type", ASCENDING), ("created_at", DESCENDING)],         name="idx_rec_type_time")
-    await _safe_create_index(rc, [("created_at", ASCENDING)], name="idx_rec_ttl",           expireAfterSeconds=15_552_000)
+    await _safe_create_index(rc, [("report_id", ASCENDING)], name="idx_rec_report_id",      unique=False)
 
     # ── alerts ────────────────────────────────────────────────
     al = db[settings.MONGO_COL_ALERTS]

@@ -31,6 +31,7 @@ import {
   Database,
   Cpu,
   Cloud,
+  History,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -66,6 +67,12 @@ const menuItems = [
     href: "/weather",
     icon: CloudSun,
     description: "Weather forecasts",
+  },
+  {
+    title: "History",
+    href: "/history",
+    icon: History,
+    description: "Recommendation history",
   },
 ];
 
