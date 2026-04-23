@@ -71,5 +71,8 @@ export const postGenerateReport = (body) =>
 export const getRecommendHistory = (userId, page = 1) =>
   request(`/api/recommend/history?${userId ? `user_id=${userId}&` : ""}page=${page}`);
 
+export const getRecommendationById = (reportId) =>
+  request(`/api/recommend/history/${reportId}`);
+
 // ── Health ────────────────────────────────────────────────────
 export const getHealth = () => request("/health");
