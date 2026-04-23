@@ -152,7 +152,7 @@ export default function AIAdvisorPage() {
   };
 
   const runSoil = async () => {
-    setLoadingPanel("soil"); setError(null);
+    setLoadingPanel("soil"); setError(null); setSoilResult(null);
     try {
       const body = dataSource === "manual"
         ? {
@@ -173,7 +173,7 @@ export default function AIAdvisorPage() {
   };
 
   const runFert = async () => {
-    setLoadingPanel("fert"); setError(null);
+    setLoadingPanel("fert"); setError(null); setFertResult(null);
     try {
       const body: any = dataSource === "manual"
         ? {
@@ -198,7 +198,7 @@ export default function AIAdvisorPage() {
   };
 
   const runIrrig = async () => {
-    setLoadingPanel("irrig"); setError(null);
+    setLoadingPanel("irrig"); setError(null); setIrrigResult(null);
     try {
       const body: any = dataSource === "manual"
         ? {
