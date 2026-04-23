@@ -260,15 +260,6 @@ function HistoryDetailDrawer({
     return () => { cancelled = true; };
   }, [reportId]);
 
-  const TYPE_COLOR: Record<string, string> = {
-    full: "#2d6a2d", crop: "#2d6a2d", soil: "#7c3aed",
-    fertilizer: "#d97706", irrigation: "#0284c7",
-  };
-  const TYPE_ICON: Record<string, string> = {
-    full: "🤖", crop: "🌾", soil: "🌿",
-    fertilizer: "🧪", irrigation: "💧",
-  };
-
   const color = TYPE_COLOR[rec?.type ?? "full"] ?? "#0d9488";
   const icon  = TYPE_ICON[rec?.type  ?? "full"] ?? "🤖";
 
