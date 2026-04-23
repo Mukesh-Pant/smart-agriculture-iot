@@ -1,9 +1,12 @@
 "use client";
-import { useCallback, useState } from "react";
-import { T, F } from "../_components/DashboardComponents";
+import { useCallback, useEffect, useState } from "react";
+import { T, F, ConfRow, Badge, Divider, Err } from "../_components/DashboardComponents";
 import { usePolling } from "@/app/hooks/useApi";
 import { getRecommendHistory } from "@/app/services/api";
 import LanguageToggle, { type Lang } from "../_components/LanguageToggle";
+import SoilFertilityCard from "../_components/SoilFertilityCard";
+import AdviceSection from "../_components/AdviceSection";
+import { getRecommendationById } from "@/app/services/api";
 
 const TYPE_COLOR: Record<string, string> = {
   crop: "#2d6a2d", fertilizer: "#d97706", irrigation: "#0284c7",
@@ -28,10 +31,16 @@ interface HistoryRecord {
   advice_source?: string;
 }
 
+// Stub — replaced in Task 3
+function HistoryDetailDrawer(_: { reportId: string; lang: any; onClose: () => void }) {
+  return null;
+}
+
 export default function HistoryPage() {
-  const [lang,   setLang]   = useState<Lang>("en");
-  const [page,   setPage]   = useState(1);
-  const [filter, setFilter] = useState<string>("all");
+  const [lang,       setLang]       = useState<Lang>("en");
+  const [page,       setPage]       = useState(1);
+  const [filter,     setFilter]     = useState<string>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data, loading, error } = usePolling(
     useCallback(() => getRecommendHistory(undefined, page), [page]),
@@ -148,6 +157,7 @@ export default function HistoryPage() {
             return (
               <div
                 key={rec.id}
+                onClick={() => setSelectedId(rec.report_id ?? null)}
                 style={{
                   padding: "16px 20px",
                   background: T.surface,
@@ -155,6 +165,7 @@ export default function HistoryPage() {
                   border: `1px solid ${T.border}`,
                   borderLeft: `4px solid ${color}`,
                   transition: "all 0.2s",
+                  cursor: "pointer",
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = T.cardHover)}
                 onMouseLeave={e => (e.currentTarget.style.background = T.surface)}
@@ -294,6 +305,14 @@ export default function HistoryPage() {
           100% { background-position: -200% 0; }
         }
       `}</style>
+
+      {selectedId && (
+        <HistoryDetailDrawer
+          reportId={selectedId}
+          lang={lang}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
     </div>
   );
 }
