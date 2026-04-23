@@ -5,6 +5,7 @@ import {
 } from "../_components/DashboardComponents";
 import {
   postCropRecommendation, postCompleteReport, postGenerateReport,
+  postFertilizerRecommendation, postIrrigationRecommendation, postSoilFertility,
 } from "@/app/services/api";
 import LanguageToggle, { type Lang } from "../_components/LanguageToggle";
 import SoilFertilityCard from "../_components/SoilFertilityCard";
@@ -16,9 +17,7 @@ import ManualInputPanel, {
 
 // ── Types ─────────────────────────────────────────────────────
 
-type Step       = "initial" | "crop-ready" | "report-ready";
 type DataSource = "live" | "manual";
-type Loading    = "crop" | "report" | null;
 
 interface CropResult {
   crop:           string;
@@ -47,24 +46,36 @@ interface CompleteReport {
   generated_at:    string;
 }
 
-// ── Sub-components ────────────────────────────────────────────
-
-function StepBadge({ n, active, done }: { n: number; active: boolean; done: boolean }) {
-  const bg = done ? "#2d6a2d" : active ? "#e8f4e8" : T.cardHover;
-  const fg = done ? "#fff"    : active ? "#2d6a2d" : T.textMuted;
-  return (
-    <div style={{
-      width: 28, height: 28, borderRadius: "50%",
-      background: bg, color: fg,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: 13, fontWeight: 700, flexShrink: 0,
-      border: `2px solid ${done ? "#2d6a2d" : active ? "#2d6a2d" : T.border}`,
-      transition: "all 0.25s",
-    }}>
-      {done ? "✓" : n}
-    </div>
-  );
+interface SoilResult {
+  fertility_class: string;
+  confidence:      number;
+  confidence_pct:  string;
+  class_probs?:    Record<string, number>;
+  advice?:         string;
+  explanation?:    Record<string, number> | null;
 }
+
+interface FertResult {
+  fertilizer:          string;
+  confidence:          number;
+  confidence_pct:      string;
+  top_3_fertilizers?:  Array<{ label: string; probability: number }>;
+  advice?:             string;
+  npk_status?:         Record<string, string>;
+}
+
+interface IrrigResult {
+  action:           string;
+  confidence:       number;
+  confidence_pct:   string;
+  advice?:          string;
+  water_amount_mm?: number;
+  urgency:          string;
+}
+
+type LoadingPanel = "crop" | "soil" | "fert" | "irrig" | "report" | null;
+
+// ── Sub-components ────────────────────────────────────────────
 
 function TopM({ rank, label, pct, color, selected, onClick }: any) {
   const [hov, setHov] = useState(false);
@@ -100,27 +111,25 @@ function TopM({ rank, label, pct, color, selected, onClick }: any) {
 // ── Main Page ─────────────────────────────────────────────────
 
 export default function AIAdvisorPage() {
-  const [step,          setStep]          = useState<Step>("initial");
-  const [dataSource,    setDataSource]    = useState<DataSource>("live");
-  const [manualInput,   setManualInput]   = useState<ManualInput>(defaultManualInput);
   const [cropResult,    setCropResult]    = useState<CropResult | null>(null);
+  const [soilResult,    setSoilResult]    = useState<SoilResult | null>(null);
+  const [fertResult,    setFertResult]    = useState<FertResult | null>(null);
+  const [irrigResult,   setIrrigResult]   = useState<IrrigResult | null>(null);
   const [confirmedCrop, setConfirmedCrop] = useState<string | null>(null);
+  const [loadingPanel,  setLoadingPanel]  = useState<LoadingPanel>(null);
   const [report,        setReport]        = useState<CompleteReport | null>(null);
-  const [loading,       setLoading]       = useState<Loading>(null);
+  const [pdfBusy,       setPdfBusy]       = useState(false);
   const [error,         setError]         = useState<string | null>(null);
   const [lang,          setLang]          = useState<Lang>("en");
-  const [pdfBusy,       setPdfBusy]       = useState(false);
+  const [dataSource,    setDataSource]    = useState<DataSource>("live");
+  const [manualInput,   setManualInput]   = useState<ManualInput>(defaultManualInput);
 
   const uc = { low: T.accent, medium: T.amber, high: T.rose } as const;
 
-  // ── Step 1: Get crop recommendation ──────────────────────────
-  const runCropRecommendation = async () => {
-    setLoading("crop");
-    setError(null);
-    setCropResult(null);
-    setConfirmedCrop(null);
-    setReport(null);
-    setStep("initial");
+  // ── Crop recommendation ──────────────────────────────────────
+  const runCrop = async () => {
+    setLoadingPanel("crop"); setError(null);
+    setCropResult(null); setConfirmedCrop(null); setReport(null);
     try {
       const body = dataSource === "manual"
         ? {
@@ -132,23 +141,93 @@ export default function AIAdvisorPage() {
             humidity:    manualInput.humidity,
             rainfall:    manualInput.rainfall,
           }
-        : { nitrogen: 60, phosphorus: 40, potassium: 40, ph: 6.5 };
-
+        : {};
       const result = await postCropRecommendation(body);
       setCropResult(result);
-      setStep("crop-ready");
     } catch (e: any) {
       setError(e.message ?? "Crop recommendation failed");
     } finally {
-      setLoading(null);
+      setLoadingPanel(null);
     }
   };
 
-  // ── Step 2: Generate full report ──────────────────────────────
+  const runSoil = async () => {
+    setLoadingPanel("soil"); setError(null);
+    try {
+      const body = dataSource === "manual"
+        ? {
+            nitrogen:   manualInput.nitrogen,
+            phosphorus: manualInput.phosphorus,
+            potassium:  manualInput.potassium,
+            ph:         manualInput.ph,
+            moisture:   manualInput.soil_moisture,
+          }
+        : {};
+      const result = await postSoilFertility(body);
+      setSoilResult(result);
+    } catch (e: any) {
+      setError(e.message ?? "Soil analysis failed");
+    } finally {
+      setLoadingPanel(null);
+    }
+  };
+
+  const runFert = async () => {
+    setLoadingPanel("fert"); setError(null);
+    try {
+      const body: any = dataSource === "manual"
+        ? {
+            nitrogen:    manualInput.nitrogen,
+            phosphorus:  manualInput.phosphorus,
+            potassium:   manualInput.potassium,
+            temperature: manualInput.temperature,
+            humidity:    manualInput.humidity,
+            moisture:    manualInput.soil_moisture,
+            soil_type:   manualInput.soil_type,
+            ph:          manualInput.ph,
+          }
+        : {};
+      body.crop_type = confirmedCrop ?? "General";
+      const result = await postFertilizerRecommendation(body);
+      setFertResult(result);
+    } catch (e: any) {
+      setError(e.message ?? "Fertilizer recommendation failed");
+    } finally {
+      setLoadingPanel(null);
+    }
+  };
+
+  const runIrrig = async () => {
+    setLoadingPanel("irrig"); setError(null);
+    try {
+      const body: any = dataSource === "manual"
+        ? {
+            soil_moisture: manualInput.soil_moisture,
+            temperature:   manualInput.temperature,
+            humidity:      manualInput.humidity,
+            ph:            manualInput.ph,
+            rainfall_mm:   manualInput.rainfall,
+          }
+        : {};
+      if (confirmedCrop) {
+        body.crop_type  = confirmedCrop;
+        body.crop_aware = true;
+      } else {
+        body.crop_aware = false;
+      }
+      const result = await postIrrigationRecommendation(body);
+      setIrrigResult(result);
+    } catch (e: any) {
+      setError(e.message ?? "Irrigation recommendation failed");
+    } finally {
+      setLoadingPanel(null);
+    }
+  };
+
+  // ── Full report ───────────────────────────────────────────────
   const runFullReport = async () => {
     if (!confirmedCrop || !cropResult) return;
-    setLoading("report");
-    setError(null);
+    setLoadingPanel("report"); setError(null);
     try {
       const body: any = {
         confirmed_crop:  confirmedCrop,
@@ -156,23 +235,22 @@ export default function AIAdvisorPage() {
         crop_top_3:      cropResult.top_3_crops,
       };
       if (dataSource === "manual") {
-        body.nitrogen     = manualInput.nitrogen;
-        body.phosphorus   = manualInput.phosphorus;
-        body.potassium    = manualInput.potassium;
-        body.temperature  = manualInput.temperature;
-        body.humidity     = manualInput.humidity;
-        body.ph           = manualInput.ph;
-        body.rainfall     = manualInput.rainfall;
+        body.nitrogen      = manualInput.nitrogen;
+        body.phosphorus    = manualInput.phosphorus;
+        body.potassium     = manualInput.potassium;
+        body.temperature   = manualInput.temperature;
+        body.humidity      = manualInput.humidity;
+        body.ph            = manualInput.ph;
+        body.rainfall      = manualInput.rainfall;
         body.soil_moisture = manualInput.soil_moisture;
-        body.soil_type    = manualInput.soil_type;
+        body.soil_type     = manualInput.soil_type;
       }
       const result = await postCompleteReport(body);
       setReport(result);
-      setStep("report-ready");
     } catch (e: any) {
       setError(e.message ?? "Report generation failed");
     } finally {
-      setLoading(null);
+      setLoadingPanel(null);
     }
   };
 
@@ -208,11 +286,9 @@ export default function AIAdvisorPage() {
   };
 
   const resetAll = () => {
-    setStep("initial");
-    setCropResult(null);
-    setConfirmedCrop(null);
-    setReport(null);
-    setError(null);
+    setCropResult(null); setSoilResult(null);
+    setFertResult(null); setIrrigResult(null);
+    setConfirmedCrop(null); setReport(null); setError(null);
   };
 
   // ── Helpers ───────────────────────────────────────────────────
@@ -262,6 +338,8 @@ export default function AIAdvisorPage() {
   }
 
   // ── Render ────────────────────────────────────────────────────
+  const step: string = "initial"; // temporary — render replaced in Task 5
+  const loading: string | null = null; // temporary — render replaced in Task 5
   return (
     <div style={{ backgroundColor: T.bg, minHeight: "100vh", padding: "24px" }}>
 
@@ -368,7 +446,6 @@ export default function AIAdvisorPage() {
       }}>
         {/* Step header */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <StepBadge n={1} active={step === "initial"} done={step !== "initial"} />
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
               {t("Crop Recommendation", "बाली सिफारिस")}
@@ -386,7 +463,7 @@ export default function AIAdvisorPage() {
 
         {/* Get Crop button */}
         <button
-          onClick={runCropRecommendation}
+          onClick={runCrop}
           disabled={loading !== null}
           style={{
             padding: "13px 28px", borderRadius: 12,
@@ -440,7 +517,6 @@ export default function AIAdvisorPage() {
           transition: "all 0.25s",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-            <StepBadge n={2} active={step === "crop-ready"} done={step === "report-ready"} />
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
                 {t("Full Report", "पूर्ण रिपोर्ट")}
