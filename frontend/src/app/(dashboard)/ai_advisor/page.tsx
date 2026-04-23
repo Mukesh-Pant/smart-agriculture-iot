@@ -1,101 +1,195 @@
 "use client";
-import { useCallback, useState } from "react";
+import React, { useState } from "react";
 import {
   T, F, Card, Err, ConfRow, Badge, Divider, Skeleton, fmt,
 } from "../_components/DashboardComponents";
-import { usePolling } from "@/app/hooks/useApi";
 import {
-  getFullRecommendation, postCropRecommendation,
-  postSoilFertility, postGenerateReport,
+  postCropRecommendation, postCompleteReport, postGenerateReport,
 } from "@/app/services/api";
 import LanguageToggle, { type Lang } from "../_components/LanguageToggle";
 import SoilFertilityCard from "../_components/SoilFertilityCard";
 import AdviceSection from "../_components/AdviceSection";
-import ManualInputPanel, { type ManualInput } from "../_components/ManualInputPanel";
+import ManualInputPanel, {
+  defaultManualInput,
+  type ManualInput,
+} from "../_components/ManualInputPanel";
 
-interface IRecommendationData {
-  crop?: {
-    crop: string;
-    confidence: number;
-    confidence_pct: string;
-    advice: string;
-    top_3_crops?: Array<{ label: string; probability: number }>;
-  };
-  irrigation?: {
-    urgency: "low" | "medium" | "high";
-    action: string;
-    confidence: number;
-    confidence_pct: string;
-    water_amount_mm?: number;
-    advice: string;
-  };
-  fertilizer?: {
-    fertilizer: string;
-    confidence: number;
-    confidence_pct: string;
-    advice: string;
-    npk_status?: Record<string, string>;
-    top_3_fertilizers?: Array<{ label: string; probability: number }>;
-  };
-  soil?: {
-    fertility_class: string;
-    confidence: number;
-    confidence_pct: string;
-    class_probs?: Record<string, number>;
-    advice: string;
-    explanation?: Record<string, number> | null;
-  };
-  warnings?: string[];
-  sensor_data_used?: Record<string, number>;
-  weather_data_used?: { temperature_c: number; rainfall_monthly_mm: number };
+// ── Types ─────────────────────────────────────────────────────
+
+type Step       = "initial" | "crop-ready" | "report-ready";
+type DataSource = "live" | "manual";
+type Loading    = "crop" | "report" | null;
+
+interface CropResult {
+  crop:           string;
+  confidence:     number;
+  confidence_pct: string;
+  top_3_crops:    Array<{ label: string; probability: number }>;
+  advice:         string;
 }
 
+interface SectionAdvice {
+  advice_en: string;
+  advice_np: string;
+  source:    string;
+}
+
+interface CompleteReport {
+  report_id:       string;
+  confirmed_crop:  string;
+  crop_confidence: number | null;
+  crop_top_3:      Array<{ label: string; probability: number }> | null;
+  fertilizer:      any;
+  irrigation:      any;
+  soil:            any;
+  advice:          { crop: SectionAdvice; fertilizer: SectionAdvice; irrigation: SectionAdvice; soil: SectionAdvice };
+  sensor_data_used: Record<string, number>;
+  generated_at:    string;
+}
+
+// ── Sub-components ────────────────────────────────────────────
+
+function StepBadge({ n, active, done }: { n: number; active: boolean; done: boolean }) {
+  const bg = done ? "#2d6a2d" : active ? "#e8f4e8" : T.cardHover;
+  const fg = done ? "#fff"    : active ? "#2d6a2d" : T.textMuted;
+  return (
+    <div style={{
+      width: 28, height: 28, borderRadius: "50%",
+      background: bg, color: fg,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: 13, fontWeight: 700, flexShrink: 0,
+      border: `2px solid ${done ? "#2d6a2d" : active ? "#2d6a2d" : T.border}`,
+      transition: "all 0.25s",
+    }}>
+      {done ? "✓" : n}
+    </div>
+  );
+}
+
+function TopM({ rank, label, pct, color, selected, onClick }: any) {
+  const [hov, setHov] = useState(false);
+  const isSelected = selected === label;
+  return (
+    <button
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      onClick={onClick}
+      style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: "10px 12px",
+        borderRadius: 10,
+        border: `2px solid ${isSelected ? color : hov ? `${color}40` : T.border}`,
+        background: isSelected ? `${color}12` : hov ? `${color}06` : T.surface,
+        cursor: "pointer", width: "100%",
+        transition: "all 0.18s",
+        marginBottom: 8,
+      }}
+    >
+      <span style={{ color: T.textSub, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 16 }}>{["🥇", "🥈", "🥉"][rank]}</span>
+        <span style={{ textTransform: "capitalize", fontWeight: isSelected ? 700 : 400 }}>{label}</span>
+        {isSelected && <span style={{ fontSize: 10, color, fontWeight: 700 }}>✓ Selected</span>}
+      </span>
+      <span style={{ color, fontFamily: F.mono, fontSize: 14, fontWeight: 600 }}>
+        {pct}%
+      </span>
+    </button>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────
+
 export default function AIAdvisorPage() {
-  const { data: rec, loading, error, refetch } = usePolling(
-    useCallback(() => getFullRecommendation(), []),
-    0
-  ) as { data: IRecommendationData | null; loading: boolean; error: any; refetch: () => void };
+  const [step,          setStep]          = useState<Step>("initial");
+  const [dataSource,    setDataSource]    = useState<DataSource>("live");
+  const [manualInput,   setManualInput]   = useState<ManualInput>(defaultManualInput);
+  const [cropResult,    setCropResult]    = useState<CropResult | null>(null);
+  const [confirmedCrop, setConfirmedCrop] = useState<string | null>(null);
+  const [report,        setReport]        = useState<CompleteReport | null>(null);
+  const [loading,       setLoading]       = useState<Loading>(null);
+  const [error,         setError]         = useState<string | null>(null);
+  const [lang,          setLang]          = useState<Lang>("en");
+  const [pdfBusy,       setPdfBusy]       = useState(false);
 
-  const [lang,         setLang]         = useState<Lang>("en");
-  const [manualResult, setManualResult] = useState<IRecommendationData | null>(null);
-  const [manualBusy,   setManualBusy]   = useState(false);
-  const [pdfBusy,      setPdfBusy]      = useState(false);
+  const uc = { low: T.accent, medium: T.amber, high: T.rose } as const;
 
-  const activeRec = manualResult ?? rec;
-  const uc = { low: T.accent, medium: T.amber, high: T.rose };
-
-  const runManual = async (input: ManualInput) => {
-    setManualBusy(true);
+  // ── Step 1: Get crop recommendation ──────────────────────────
+  const runCropRecommendation = async () => {
+    setLoading("crop");
+    setError(null);
+    setCropResult(null);
+    setConfirmedCrop(null);
+    setReport(null);
+    setStep("initial");
     try {
-      const [fullRec, soilRec] = await Promise.all([
-        getFullRecommendation(),
-        postSoilFertility({
-          nitrogen: input.nitrogen, phosphorus: input.phosphorus,
-          potassium: input.potassium, ph: input.ph,
-          moisture: input.soil_moisture, explain: true,
-        }),
-      ]);
-      setManualResult({ ...(fullRec ?? {}), soil: soilRec });
+      const body = dataSource === "manual"
+        ? {
+            nitrogen:    manualInput.nitrogen,
+            phosphorus:  manualInput.phosphorus,
+            potassium:   manualInput.potassium,
+            ph:          manualInput.ph,
+            temperature: manualInput.temperature,
+            humidity:    manualInput.humidity,
+            rainfall:    manualInput.rainfall,
+          }
+        : { nitrogen: 60, phosphorus: 40, potassium: 40, ph: 6.5 };
+
+      const result = await postCropRecommendation(body);
+      setCropResult(result);
+      setStep("crop-ready");
     } catch (e: any) {
-      alert(e.message ?? "Manual run failed");
+      setError(e.message ?? "Crop recommendation failed");
     } finally {
-      setManualBusy(false);
+      setLoading(null);
+    }
+  };
+
+  // ── Step 2: Generate full report ──────────────────────────────
+  const runFullReport = async () => {
+    if (!confirmedCrop || !cropResult) return;
+    setLoading("report");
+    setError(null);
+    try {
+      const body: any = {
+        confirmed_crop:  confirmedCrop,
+        crop_confidence: cropResult.confidence,
+        crop_top_3:      cropResult.top_3_crops,
+      };
+      if (dataSource === "manual") {
+        body.nitrogen     = manualInput.nitrogen;
+        body.phosphorus   = manualInput.phosphorus;
+        body.potassium    = manualInput.potassium;
+        body.temperature  = manualInput.temperature;
+        body.humidity     = manualInput.humidity;
+        body.ph           = manualInput.ph;
+        body.rainfall     = manualInput.rainfall;
+        body.soil_moisture = manualInput.soil_moisture;
+        body.soil_type    = manualInput.soil_type;
+      }
+      const result = await postCompleteReport(body);
+      setReport(result);
+      setStep("report-ready");
+    } catch (e: any) {
+      setError(e.message ?? "Report generation failed");
+    } finally {
+      setLoading(null);
     }
   };
 
   const downloadPDF = async () => {
-    if (!activeRec) return;
+    if (!report) return;
     setPdfBusy(true);
     try {
       const body = {
-        crop:       activeRec.crop?.crop,
-        fertilizer: activeRec.fertilizer?.fertilizer,
-        soil_class: activeRec.soil?.fertility_class,
-        irrigation: activeRec.irrigation?.action,
-        crop_confidence:       activeRec.crop?.confidence,
-        fertilizer_confidence: activeRec.fertilizer?.confidence,
-        input_data: activeRec.sensor_data_used,
-        language: lang,
+        report_id:  report.report_id,
+        crop:       report.confirmed_crop,
+        fertilizer: report.fertilizer?.fertilizer,
+        soil_class: report.soil?.fertility_class,
+        irrigation: report.irrigation?.action,
+        advice_en:  report.advice?.crop?.advice_en,
+        advice_np:  report.advice?.crop?.advice_np,
+        input_data: report.sensor_data_used,
+        language:   lang,
       };
       const res = await postGenerateReport(body);
       if (!res.ok) throw new Error("PDF generation failed");
@@ -103,430 +197,518 @@ export default function AIAdvisorPage() {
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a");
       a.href = url;
-      a.download = `AgriSense_Report_${Date.now()}.pdf`;
+      a.download = `AgriSense_Report_${report.report_id}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
-      alert(e.message ?? "PDF download failed");
+      setError(e.message ?? "PDF download failed");
     } finally {
       setPdfBusy(false);
     }
   };
 
-  function CHead({ label, color, badge }: any) {
-    return (
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color, textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
-          {label}
-        </div>
-        <Badge text={badge} color={color} size="sm" />
-      </div>
-    );
-  }
-
-  function TopM({ rank, label, pct, color }: any) {
-    const [hov, setHov] = useState(false);
-    return (
-      <div
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => setHov(false)}
-        style={{
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          padding: "8px 0", paddingLeft: hov ? 8 : 0,
-          borderBottom: `1px solid ${T.border}`,
-          transition: "all 0.2s ease", cursor: "default",
-        }}
-      >
-        <span style={{ color: T.textSub, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 16 }}>{["🥇", "🥈", "🥉"][rank]}</span>
-          <span style={{ textTransform: "capitalize" }}>{label}</span>
-        </span>
-        <span style={{ color, fontFamily: F.mono, fontSize: 14, fontWeight: 600 }}>{pct}%</span>
-      </div>
-    );
-  }
-
-  const getGreeting = () => {
-    const h = new Date().getHours();
-    if (lang === "np") {
-      if (h < 12) return "शुभ बिहान";
-      if (h < 18) return "शुभ दिउँसो";
-      return "शुभ साँझ";
-    }
-    if (h < 12) return "Good morning";
-    if (h < 18) return "Good afternoon";
-    return "Good evening";
+  const resetAll = () => {
+    setStep("initial");
+    setCropResult(null);
+    setConfirmedCrop(null);
+    setReport(null);
+    setError(null);
   };
 
+  // ── Helpers ───────────────────────────────────────────────────
+  const t = (en: string, np: string) => lang === "en" ? en : np;
+
+  function SectionCard({
+    icon, iconBg, title, subtitle, accentColor, children,
+  }: {
+    icon: string; iconBg: string; title: string; subtitle: string;
+    accentColor: string; children: React.ReactNode;
+  }) {
+    return (
+      <div style={{
+        background: T.surface,
+        borderRadius: 20,
+        border: `1px solid ${T.border}`,
+        overflow: "hidden",
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+        display: "flex", flexDirection: "column",
+      }}>
+        <div style={{
+          padding: "16px 24px 0",
+          borderBottom: `3px solid ${accentColor}`,
+          paddingBottom: 16,
+          background: `${accentColor}08`,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 42, height: 42, borderRadius: 12,
+              background: iconBg,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 22,
+            }}>
+              {icon}
+            </div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: 0 }}>{title}</h3>
+              <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>{subtitle}</p>
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: "20px 24px", flex: 1 }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────
   return (
     <div style={{ backgroundColor: T.bg, minHeight: "100vh", padding: "24px" }}>
-      {/* ── Header ── */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h1 style={{ fontSize: "clamp(22px,4vw,30px)", fontWeight: 700, color: T.text, marginBottom: 4, letterSpacing: "-0.02em" }}>
-              {getGreeting()},
-            </h1>
-            <p style={{ fontSize: 13, color: T.textMuted, display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#2d6a2d", animation: "pulseDot 2s infinite", display: "inline-block" }} />
-              <span>
-                {lang === "en"
-                  ? "AI-powered crop & soil recommendations"
-                  : "एआई-संचालित बाली र माटो सिफारिस"}
-              </span>
-            </p>
-          </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <LanguageToggle lang={lang} onChange={setLang} />
-
-            {activeRec && (
-              <button
-                onClick={downloadPDF}
-                disabled={pdfBusy}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  padding: "9px 16px",
-                  background: "#fffbf0",
-                  border: "1px solid #d4a017",
-                  borderRadius: 10, color: "#9a7212",
-                  fontSize: 13, fontWeight: 600,
-                  cursor: pdfBusy ? "default" : "pointer",
-                  opacity: pdfBusy ? 0.7 : 1,
-                }}
-              >
-                {pdfBusy ? "⟳" : "📄"}
-                {lang === "en" ? "Download Report" : "रिपोर्ट डाउनलोड"}
-              </button>
-            )}
-
+      {/* ── Page Header ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: "clamp(20px,3vw,28px)", fontWeight: 800, color: T.text, margin: 0, letterSpacing: "-0.02em" }}>
+            🌱 {t("ML Advisor", "एमएल सल्लाहकार")}
+          </h1>
+          <p style={{ fontSize: 13, color: T.textMuted, margin: "4px 0 0" }}>
+            {t("Guided crop & soil recommendations", "निर्देशित बाली र माटो सिफारिस")}
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <LanguageToggle lang={lang} onChange={setLang} />
+          {report && (
             <button
-              onClick={refetch}
+              onClick={downloadPDF}
+              disabled={pdfBusy}
               style={{
-                display: "flex", alignItems: "center", gap: 8,
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "9px 16px",
+                background: "#fffbf0", border: "1px solid #d4a017",
+                borderRadius: 10, color: "#9a7212",
+                fontSize: 13, fontWeight: 600,
+                cursor: pdfBusy ? "default" : "pointer",
+                opacity: pdfBusy ? 0.7 : 1,
+              }}
+            >
+              {pdfBusy ? "⟳" : "📄"} {t("Download PDF", "PDF डाउनलोड")}
+            </button>
+          )}
+          {step !== "initial" && (
+            <button
+              onClick={resetAll}
+              style={{
                 padding: "9px 16px", background: T.surface,
                 border: `1px solid ${T.border}`, borderRadius: 10,
                 color: T.text, fontSize: 13, fontWeight: 500, cursor: "pointer",
               }}
             >
-              ↺ {lang === "en" ? "Refresh" : "ताजा गर्नुहोस्"}
+              🔄 {t("New Analysis", "नयाँ विश्लेषण")}
             </button>
-          </div>
-        </div>
-
-        {/* Stats row */}
-        <div style={{
-          display: "grid", gridTemplateColumns: "repeat(4,1fr)",
-          gap: 14, marginTop: 18,
-        }} className="stats-grid">
-          {[
-            { label: lang === "en" ? "AI Status" : "एआई अवस्था",     value: activeRec ? (lang === "en" ? "Active" : "सक्रिय") : "Ready", color: "#2d6a2d" },
-            { label: lang === "en" ? "Crops Analyzed" : "बाली विश्लेषण", value: String(activeRec?.crop?.top_3_crops?.length ?? 3),           color: T.violet  },
-            { label: lang === "en" ? "Soil Class" : "माटो वर्ग",       value: activeRec?.soil?.fertility_class ?? "—",                     color: T.teal    },
-            { label: lang === "en" ? "Last Updated" : "अन्तिम अद्यावधिक", value: activeRec ? new Date().toLocaleTimeString() : "—",          color: T.amber   },
-          ].map((s, i) => (
-            <div key={i} style={{
-              padding: "14px 16px", background: T.surface,
-              borderRadius: 14, border: `1px solid ${T.border}`,
-            }}>
-              <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 4 }}>{s.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.value}</div>
-            </div>
-          ))}
+          )}
         </div>
       </div>
 
       <Err msg={error} />
 
-      {/* ── Manual/Demo Mode Panel ── */}
-      <ManualInputPanel lang={lang} onSubmit={runManual} loading={manualBusy} />
-
-      {/* ── Warnings ── */}
-      {activeRec?.warnings?.map((w: string, i: number) => (
-        <div key={i} style={{
-          padding: "10px 14px", borderRadius: 10, marginBottom: 12,
-          background: T.amberSubtle, border: `1px solid ${T.amber}30`,
-          color: T.amber, fontSize: 12, display: "flex", alignItems: "center", gap: 8,
-        }}>
-          <span>💡</span>{w}
+      {/* ── Data Source Toggle ── */}
+      <div style={{
+        background: T.surface, borderRadius: 16,
+        border: `1px solid ${T.border}`,
+        padding: "20px 24px", marginBottom: 20,
+        boxShadow: "0 1px 6px rgba(0,0,0,0.04)",
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
+          {t("Data Source", "डेटा स्रोत")}
         </div>
-      ))}
+        <div style={{ display: "flex", gap: 10, marginBottom: dataSource === "manual" ? 20 : 0 }}>
+          {(["live", "manual"] as const).map(src => (
+            <button
+              key={src}
+              onClick={() => { setDataSource(src); resetAll(); }}
+              style={{
+                padding: "10px 20px", borderRadius: 10,
+                border: `2px solid ${dataSource === src ? "#2d6a2d" : T.border}`,
+                background: dataSource === src ? "#e8f4e8" : T.cardHover,
+                color: dataSource === src ? "#2d6a2d" : T.textMuted,
+                fontWeight: 600, fontSize: 13, cursor: "pointer",
+                transition: "all 0.18s",
+                display: "flex", alignItems: "center", gap: 8,
+              }}
+            >
+              {src === "live"
+                ? <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", boxShadow: "0 0 0 2px #22c55e40" }} />{t("Live Sensor", "लाइभ सेन्सर")}</>
+                : <><span>✏️</span>{t("Manual Input", "म्यानुअल इनपुट")}</>
+              }
+            </button>
+          ))}
+        </div>
 
-      {/* ── Empty state ── */}
-      {!loading && !activeRec && !error && (
-        <Card style={{ padding: "48px 32px", textAlign: "center", borderRadius: 20 }}>
-          <div style={{ fontSize: 56, marginBottom: 16 }}>🤖</div>
-          <h3 style={{ fontSize: 20, fontWeight: 600, color: T.text, marginBottom: 8 }}>
-            {lang === "en" ? "No recommendations yet" : "अहिले सिफारिस छैन"}
-          </h3>
-          <p style={{ fontSize: 14, color: T.textMuted, maxWidth: 480, margin: "0 auto 16px", lineHeight: 1.6 }}>
-            {lang === "en"
-              ? "Click Refresh or use Manual Mode below to get AI recommendations."
-              : "एआई सिफारिस पाउन ताजा गर्नुहोस् वा म्यानुअल मोड प्रयोग गर्नुहोस्।"}
+        {dataSource === "manual" && (
+          <ManualInputPanel lang={lang} onChange={setManualInput} />
+        )}
+
+        {dataSource === "live" && (
+          <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>
+            {t(
+              "Using live sensor + weather data. Switch to Manual Input if sensors are offline.",
+              "लाइभ सेन्सर र मौसम डेटा प्रयोग गर्दै। सेन्सर अफलाइन भएमा म्यानुअल इनपुटमा स्विच गर्नुहोस्।"
+            )}
           </p>
+        )}
+      </div>
+
+      {/* ── Step 1: Crop Recommendation ── */}
+      <div style={{
+        background: T.surface, borderRadius: 16,
+        border: `1px solid ${step === "initial" ? "#2d6a2d60" : T.border}`,
+        padding: "20px 24px", marginBottom: 20,
+        boxShadow: step === "initial" ? "0 0 0 3px #2d6a2d15" : "0 1px 6px rgba(0,0,0,0.04)",
+        transition: "all 0.25s",
+      }}>
+        {/* Step header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <StepBadge n={1} active={step === "initial"} done={step !== "initial"} />
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
+              {t("Crop Recommendation", "बाली सिफारिस")}
+            </div>
+            <div style={{ fontSize: 12, color: T.textMuted }}>
+              {t("AI identifies the best crop for your conditions", "एआईले तपाईंको अवस्थाका लागि उत्तम बाली पहिचान गर्छ")}
+            </div>
+          </div>
+          {step !== "initial" && cropResult && (
+            <div style={{ marginLeft: "auto", fontSize: 13, color: "#2d6a2d", fontWeight: 600 }}>
+              {confirmedCrop ? `✓ ${confirmedCrop} ${t("confirmed", "पुष्टि भयो")}` : `${t("Select a crop below", "तलबाट बाली छान्नुहोस्")}`}
+            </div>
+          )}
+        </div>
+
+        {/* Get Crop button */}
+        <button
+          onClick={runCropRecommendation}
+          disabled={loading !== null}
+          style={{
+            padding: "13px 28px", borderRadius: 12,
+            border: "none",
+            background: loading === "crop" ? T.cardHover : "#2d6a2d",
+            color: loading === "crop" ? T.textMuted : "#fff",
+            fontWeight: 700, fontSize: 14, cursor: loading !== null ? "default" : "pointer",
+            display: "flex", alignItems: "center", gap: 8,
+            transition: "all 0.2s", opacity: loading === "report" ? 0.5 : 1,
+          }}
+        >
+          {loading === "crop"
+            ? <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>{t("Analyzing…", "विश्लेषण गर्दै…")}</>
+            : <><span>🌾</span>{t("Get Crop Recommendation", "बाली सिफारिस प्राप्त गर्नुहोस्")}</>
+          }
+        </button>
+
+        {/* Crop results & selection */}
+        {cropResult && step !== "initial" && (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
+              {t("Select your crop — Top 3 matches", "आफ्नो बाली छान्नुहोस् — शीर्ष ३ मिलान")}
+            </div>
+            {cropResult.top_3_crops?.map((c, i) => (
+              <TopM
+                key={c.label}
+                rank={i}
+                label={c.label}
+                pct={Math.round(c.probability * 100)}
+                color="#2d6a2d"
+                selected={confirmedCrop}
+                onClick={() => setConfirmedCrop(c.label)}
+              />
+            ))}
+            {cropResult.advice && (
+              <p style={{ fontSize: 12, color: T.textMuted, marginTop: 8, lineHeight: 1.6 }}>
+                {cropResult.advice}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Step 2: Generate Full Report ── */}
+      {confirmedCrop && (
+        <div style={{
+          background: T.surface, borderRadius: 16,
+          border: `1px solid ${step === "crop-ready" ? "#2d6a2d60" : T.border}`,
+          padding: "20px 24px", marginBottom: 20,
+          boxShadow: step === "crop-ready" ? "0 0 0 3px #2d6a2d15" : "0 1px 6px rgba(0,0,0,0.04)",
+          transition: "all 0.25s",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+            <StepBadge n={2} active={step === "crop-ready"} done={step === "report-ready"} />
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
+                {t("Full Report", "पूर्ण रिपोर्ट")}
+              </div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>
+                {t(
+                  `Fertilizer · Irrigation · Soil Fertility for ${confirmedCrop}`,
+                  `${confirmedCrop} का लागि मलखाद · सिँचाई · माटो उर्वरता`
+                )}
+              </div>
+            </div>
+          </div>
+
           <button
-            onClick={refetch}
+            onClick={runFullReport}
+            disabled={loading !== null || step === "report-ready"}
             style={{
-              padding: "12px 24px", background: "#2d6a2d",
-              border: "none", borderRadius: 12, color: "white",
-              fontWeight: 700, fontSize: 14, cursor: "pointer",
+              padding: "13px 28px", borderRadius: 12,
+              border: step === "report-ready" ? "2px solid #2d6a2d40" : "none",
+              background: step === "report-ready" ? "#f0faf0" : loading === "report" ? T.cardHover : "#2d6a2d",
+              color: step === "report-ready" ? "#2d6a2d" : loading === "report" ? T.textMuted : "#fff",
+              fontWeight: 700, fontSize: 14,
+              cursor: loading !== null || step === "report-ready" ? "default" : "pointer",
+              display: "flex", alignItems: "center", gap: 8,
+              transition: "all 0.2s",
             }}
           >
-            {lang === "en" ? "Get Recommendations" : "सिफारिस प्राप्त गर्नुहोस्"}
+            {loading === "report"
+              ? <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>{t("Generating report…", "रिपोर्ट तयार गर्दै…")}</>
+              : step === "report-ready"
+              ? <><span>✓</span>{t("Report Generated", "रिपोर्ट तयार भयो")}</>
+              : <><span>📊</span>{t("Generate Full Report", "पूर्ण रिपोर्ट बनाउनुहोस्")}</>
+            }
           </button>
-        </Card>
-      )}
 
-      {/* ── Loading skeletons ── */}
-      {loading && !activeRec && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 20, marginBottom: 24 }} className="recommendations-grid">
-          {[0,1,2,3].map(i => <Skeleton key={i} height={400} radius={16} />)}
+          {loading === "report" && (
+            <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                t("Running fertilizer model…", "मलखाद मोडल चलाउँदै…"),
+                t("Running irrigation model…", "सिँचाई मोडल चलाउँदै…"),
+                t("Running soil fertility model…", "माटो उर्वरता मोडल चलाउँदै…"),
+                t("Generating bilingual advice…", "द्विभाषी सल्लाह तयार गर्दै…"),
+              ].map((msg, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, color: T.textMuted, fontSize: 12 }}>
+                  <span style={{ animation: "spin 1.2s linear infinite", display: "inline-block", animationDelay: `${i * 0.2}s` }}>⟳</span>
+                  {msg}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── Main Recommendations Grid ── */}
-      {activeRec && (
+      {/* ── Full Report: 4 Cards ── */}
+      {report && step === "report-ready" && (
         <>
+          <div style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
+            {t("Complete Farm Report", "पूर्ण कृषि रिपोर्ट")} · {report.report_id}
+          </div>
+
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(2,1fr)",
-            gap: 20, marginBottom: 24,
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: 20, marginBottom: 20,
           }} className="recommendations-grid">
 
-            {/* Crop Card */}
-            {activeRec.crop && (
-              <Card style={{ padding: 24, borderRadius: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: "#2d6a2d18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🌾</div>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 2 }}>
-                      {lang === "en" ? "Crop Recommendation" : "बाली सिफारिस"}
-                    </h3>
-                    <p style={{ fontSize: 12, color: T.textMuted }}>
-                      {lang === "en" ? "Top picks for your soil" : "तपाईंको माटोका लागि उत्तम छनोट"}
-                    </p>
-                  </div>
+            {/* ── Card 1: Crop ── */}
+            <SectionCard
+              icon="🌾" iconBg="#2d6a2d18"
+              title={t("Crop Recommendation", "बाली सिफारिस")}
+              subtitle={t("SwiFT Transformer AI", "स्विफ्ट ट्रान्सफर्मर एआई")}
+              accentColor="#2d6a2d"
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <div style={{ fontSize: 32, fontWeight: 800, color: "#2d6a2d", textTransform: "capitalize" }}>
+                  {report.confirmed_crop}
                 </div>
-                <CHead label={lang === "en" ? "Recommended Crop" : "सिफारिस बाली"} color="#2d6a2d" badge={`${activeRec.crop.confidence_pct} Match`} />
-                <div style={{ fontSize: 28, fontWeight: 700, color: "#2d6a2d", textTransform: "capitalize", marginBottom: 14 }}>
-                  {activeRec.crop.crop}
-                </div>
-                <ConfRow label={lang === "en" ? "Model confidence" : "मोडल विश्वास"} value={activeRec.crop.confidence} color="#2d6a2d" />
-                <p style={{ color: T.textSub, fontSize: 13, lineHeight: 1.6, margin: "12px 0" }}>
-                  {activeRec.crop.advice}
-                </p>
-                <Divider />
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    {lang === "en" ? "Top 3 Matches" : "शीर्ष ३ मिलान"}
-                  </div>
-                  {activeRec.crop.top_3_crops?.map((c: any, i: number) => (
-                    <TopM key={i} rank={i} label={c.label} pct={Math.round(c.probability * 100)} color="#2d6a2d" />
-                  ))}
-                </div>
-                <AdviceSection
-                  lang={lang}
-                  request={{
-                    advice_type: "crop",
-                    crop: activeRec.crop.crop,
-                    confidence: activeRec.crop.confidence,
-                    nitrogen: activeRec.sensor_data_used?.N ?? 60,
-                    phosphorus: activeRec.sensor_data_used?.P ?? 40,
-                    potassium: activeRec.sensor_data_used?.K ?? 40,
-                    ph: activeRec.sensor_data_used?.ph_value ?? 6.5,
-                    rainfall: activeRec.weather_data_used?.rainfall_monthly_mm ?? 100,
-                    temperature: activeRec.weather_data_used?.temperature_c ?? 25,
-                  }}
-                />
-              </Card>
-            )}
-
-            {/* Soil Fertility Card */}
-            {activeRec.soil ? (
-              <div>
-                <SoilFertilityCard
-                  fertility_class={activeRec.soil.fertility_class}
-                  confidence={activeRec.soil.confidence}
-                  confidence_pct={activeRec.soil.confidence_pct}
-                  class_probs={activeRec.soil.class_probs}
-                  advice={activeRec.soil.advice}
-                  explanation={activeRec.soil.explanation}
-                  lang={lang}
-                />
-                <div style={{ marginTop: 8 }}>
-                  <AdviceSection
-                    lang={lang}
-                    request={{
-                      advice_type: "soil",
-                      fertility_class: activeRec.soil.fertility_class,
-                      confidence: activeRec.soil.confidence,
-                    }}
-                  />
-                </div>
+                <Badge text={`${Math.round((report.crop_confidence ?? 0) * 100)}% Match`} color="#2d6a2d" size="sm" />
               </div>
-            ) : (
-              <Card style={{ padding: 24, borderRadius: 20, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
-                <div style={{ textAlign: "center", color: T.textMuted }}>
-                  <div style={{ fontSize: 40, marginBottom: 8 }}>🌱</div>
-                  <div style={{ fontSize: 13 }}>
-                    {lang === "en" ? "Soil fertility data loading…" : "माटो उर्वरता डेटा लोड हुँदैछ…"}
+              <ConfRow label={t("Model confidence", "मोडल विश्वास")} value={report.crop_confidence ?? 0} color="#2d6a2d" />
+              {(report.crop_top_3 && report.crop_top_3.length > 0) && (
+                <>
+                  <Divider />
+                  <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", margin: "12px 0 8px" }}>
+                    {t("Top 3 Matches", "शीर्ष ३ मिलान")}
                   </div>
-                </div>
-              </Card>
-            )}
-
-            {/* Irrigation Card */}
-            {activeRec.irrigation && (() => {
-              const c = uc[activeRec.irrigation.urgency as keyof typeof uc] ?? T.teal;
-              return (
-                <Card style={{ padding: 24, borderRadius: 20 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 12, background: `${c}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>💧</div>
-                    <div>
-                      <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 2 }}>
-                        {lang === "en" ? "Irrigation" : "सिँचाई"}
-                      </h3>
-                      <p style={{ fontSize: 12, color: T.textMuted }}>
-                        {lang === "en" ? "Water management" : "पानी व्यवस्थापन"}
-                      </p>
+                  {report.crop_top_3.map((c, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${T.border}` }}>
+                      <span style={{ color: T.textSub, fontSize: 13 }}>{["🥇","🥈","🥉"][i]} <span style={{ textTransform: "capitalize" }}>{c.label}</span></span>
+                      <span style={{ color: "#2d6a2d", fontFamily: F.mono, fontWeight: 600, fontSize: 13 }}>{Math.round(c.probability * 100)}%</span>
                     </div>
+                  ))}
+                </>
+              )}
+              <AdviceSection
+                adviceEn={report.advice.crop.advice_en}
+                adviceNp={report.advice.crop.advice_np}
+                source={report.advice.crop.source}
+                lang={lang}
+              />
+            </SectionCard>
+
+            {/* ── Card 2: Soil Fertility ── */}
+            <SectionCard
+              icon="🌿" iconBg={`${({"High":"#2d6a2d","Medium":"#d97706","Low":"#dc2626"} as any)[report.soil?.fertility_class] ?? T.teal}18`}
+              title={t("Soil Fertility", "माटो उर्वरता")}
+              subtitle={t("TabNet AI + LIME Explanation", "ट्याबनेट एआई + LIME व्याख्या")}
+              accentColor={({"High":"#2d6a2d","Medium":"#d97706","Low":"#dc2626"} as any)[report.soil?.fertility_class] ?? T.teal}
+            >
+              <SoilFertilityCard
+                fertility_class={report.soil.fertility_class}
+                confidence={report.soil.confidence}
+                confidence_pct={report.soil.confidence_pct}
+                class_probs={report.soil.class_probs}
+                advice={report.soil.advice}
+                explanation={report.soil.explanation}
+                lang={lang}
+                adviceEn={report.advice.soil.advice_en}
+                adviceNp={report.advice.soil.advice_np}
+                adviceSource={report.advice.soil.source}
+                embedded
+              />
+            </SectionCard>
+
+            {/* ── Card 3: Irrigation ── */}
+            {(() => {
+              const urgency = report.irrigation?.urgency as "low" | "medium" | "high" ?? "low";
+              const c = uc[urgency] ?? T.teal;
+              return (
+                <SectionCard
+                  icon="💧" iconBg={`${c}18`}
+                  title={t("Irrigation", "सिँचाई")}
+                  subtitle={t("FT-Transformer AI (crop-aware)", "एफटी-ट्रान्सफर्मर एआई (बाली-सचेत)")}
+                  accentColor={c}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                    <Badge text={urgency.toUpperCase()} color={c} size="sm" />
                   </div>
-                  <CHead label={lang === "en" ? "Irrigation Advisory" : "सिँचाई सल्लाह"} color={c} badge={activeRec.irrigation.urgency?.toUpperCase()} />
-                  <div style={{ fontSize: 22, fontWeight: 600, color: c, marginBottom: 14, wordBreak: "break-word" }}>
-                    {activeRec.irrigation.action?.replace(/_/g, " ")}
+                  <div style={{ fontSize: 22, fontWeight: 700, color: c, marginBottom: 12, wordBreak: "break-word" }}>
+                    {report.irrigation.action?.replace(/_/g, " ")}
                   </div>
-                  <ConfRow label={lang === "en" ? "Model confidence" : "मोडल विश्वास"} value={activeRec.irrigation.confidence} color={c} />
-                  {activeRec.irrigation.water_amount_mm && (
+                  <ConfRow label={t("Model confidence", "मोडल विश्वास")} value={report.irrigation.confidence} color={c} />
+                  {report.irrigation.water_amount_mm && (
                     <div style={{ margin: "14px 0", padding: 14, borderRadius: 12, background: `${c}08`, border: `1px solid ${c}20`, textAlign: "center" }}>
-                      <div style={{ fontFamily: F.mono, fontSize: 34, fontWeight: 700, color: c, lineHeight: 1 }}>
-                        {activeRec.irrigation.water_amount_mm}
+                      <div style={{ fontFamily: F.mono, fontSize: 36, fontWeight: 700, color: c, lineHeight: 1 }}>
+                        {report.irrigation.water_amount_mm}
                         <span style={{ fontSize: 14, fontWeight: 400, color: T.textMuted, marginLeft: 4 }}>mm</span>
                       </div>
                       <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
-                        {lang === "en" ? "Recommended water volume" : "सिफारिस पानी मात्रा"}
+                        {t("Recommended water volume", "सिफारिस पानी मात्रा")}
                       </div>
                     </div>
                   )}
                   <p style={{ color: T.textSub, fontSize: 13, lineHeight: 1.6 }}>
-                    {activeRec.irrigation.advice}
+                    {report.irrigation.advice}
                   </p>
                   <AdviceSection
+                    adviceEn={report.advice.irrigation.advice_en}
+                    adviceNp={report.advice.irrigation.advice_np}
+                    source={report.advice.irrigation.source}
                     lang={lang}
-                    request={{
-                      advice_type: "irrigation",
-                      irrigation_class: 1,
-                      irrigation_action: activeRec.irrigation.action,
-                      confidence: activeRec.irrigation.confidence,
-                      crop_type: activeRec.crop?.crop ?? "Rice",
-                      soil_moisture: activeRec.sensor_data_used?.soil_moisture_pct ?? 50,
-                      temperature: activeRec.weather_data_used?.temperature_c ?? 25,
-                    }}
                   />
-                </Card>
+                </SectionCard>
               );
             })()}
 
-            {/* Fertilizer Card */}
-            {activeRec.fertilizer && (
-              <Card style={{ padding: 24, borderRadius: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: `${T.amber}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🧪</div>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 2 }}>
-                      {lang === "en" ? "Fertilizer" : "मलखाद"}
-                    </h3>
-                    <p style={{ fontSize: 12, color: T.textMuted }}>
-                      {lang === "en" ? "NPK recommendations" : "एनपीके सिफारिस"}
-                    </p>
+            {/* ── Card 4: Fertilizer ── */}
+            <SectionCard
+              icon="🧪" iconBg={`${T.amber}18`}
+              title={t("Fertilizer", "मलखाद")}
+              subtitle={t("TabNet AI + NPK Analysis", "ट्याबनेट एआई + एनपीके विश्लेषण")}
+              accentColor={T.amber}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <div style={{ fontSize: 26, fontWeight: 800, color: T.amber }}>{report.fertilizer.fertilizer}</div>
+                <Badge text={report.fertilizer.confidence_pct} color={T.amber} size="sm" />
+              </div>
+              <ConfRow label={t("Model confidence", "मोडल विश्वास")} value={report.fertilizer.confidence} color={T.amber} />
+              <p style={{ color: T.textSub, fontSize: 13, lineHeight: 1.6, margin: "10px 0" }}>
+                {report.fertilizer.advice}
+              </p>
+              {report.fertilizer.npk_status && (
+                <>
+                  <Divider />
+                  <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", margin: "12px 0 8px" }}>
+                    {t("NPK Status", "एनपीके अवस्था")}
                   </div>
-                </div>
-                <CHead label={lang === "en" ? "Fertilizer Advisory" : "मलखाद सल्लाह"} color={T.amber} badge={`${activeRec.fertilizer.confidence_pct} Match`} />
-                <div style={{ fontSize: 22, fontWeight: 700, color: T.amber, marginBottom: 14 }}>
-                  {activeRec.fertilizer.fertilizer}
-                </div>
-                <ConfRow label={lang === "en" ? "Model confidence" : "मोडल विश्वास"} value={activeRec.fertilizer.confidence} color={T.amber} />
-                <p style={{ color: T.textSub, fontSize: 13, lineHeight: 1.6, margin: "12px 0" }}>
-                  {activeRec.fertilizer.advice}
-                </p>
-                {activeRec.fertilizer.npk_status && (
-                  <>
-                    <Divider />
-                    <div style={{ marginTop: 14 }}>
-                      <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                        {lang === "en" ? "NPK Status" : "एनपीके अवस्था"}
-                      </div>
-                      {Object.entries(activeRec.fertilizer.npk_status).map(([k, v]) => (
-                        <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${T.border}` }}>
-                          <span style={{ color: T.textSub, fontSize: 13, textTransform: "capitalize" }}>{k}</span>
-                          <Badge text={v as string} color={v === "optimal" ? "#2d6a2d" : v === "low" ? T.rose : T.amber} size="sm" />
-                        </div>
-                      ))}
+                  {Object.entries(report.fertilizer.npk_status).map(([k, v]) => (
+                    <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${T.border}` }}>
+                      <span style={{ color: T.textSub, fontSize: 13, textTransform: "capitalize" }}>{k}</span>
+                      <Badge text={v as string} color={(v as string) === "optimal" ? "#2d6a2d" : (v as string) === "low" ? T.rose : T.amber} size="sm" />
                     </div>
-                  </>
-                )}
-                <Divider />
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    {lang === "en" ? "Top 3 Fertilizers" : "शीर्ष ३ मलखाद"}
-                  </div>
-                  {activeRec.fertilizer.top_3_fertilizers?.map((f: any, i: number) => (
-                    <TopM key={i} rank={i} label={f.label} pct={Math.round(f.probability * 100)} color={T.amber} />
                   ))}
-                </div>
-                <AdviceSection
-                  lang={lang}
-                  request={{
-                    advice_type: "fertilizer",
-                    fertilizer: activeRec.fertilizer.fertilizer,
-                    confidence: activeRec.fertilizer.confidence,
-                    crop_type: activeRec.crop?.crop ?? "Rice",
-                    soil_type: "Loamy",
-                    nitrogen: activeRec.sensor_data_used?.N ?? 60,
-                    phosphorus: activeRec.sensor_data_used?.P ?? 40,
-                    potassium: activeRec.sensor_data_used?.K ?? 40,
-                  }}
-                />
-              </Card>
-            )}
+                </>
+              )}
+              {report.fertilizer.top_3_fertilizers && (
+                <>
+                  <Divider />
+                  <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", margin: "12px 0 8px" }}>
+                    {t("Top 3 Fertilizers", "शीर्ष ३ मलखाद")}
+                  </div>
+                  {report.fertilizer.top_3_fertilizers.map((f: any, i: number) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${T.border}` }}>
+                      <span style={{ color: T.textSub, fontSize: 13 }}>{["🥇","🥈","🥉"][i]} {f.label}</span>
+                      <span style={{ color: T.amber, fontFamily: F.mono, fontWeight: 600, fontSize: 13 }}>{Math.round(f.probability * 100)}%</span>
+                    </div>
+                  ))}
+                </>
+              )}
+              <AdviceSection
+                adviceEn={report.advice.fertilizer.advice_en}
+                adviceNp={report.advice.fertilizer.advice_np}
+                source={report.advice.fertilizer.source}
+                lang={lang}
+              />
+            </SectionCard>
           </div>
 
-          {/* Data Used Row */}
-          {(activeRec.sensor_data_used || activeRec.weather_data_used) && (
-            <Card style={{ padding: 24, borderRadius: 20, marginBottom: 24 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: `${T.violet}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📊</div>
-                <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text }}>
-                  {lang === "en" ? "Data Used for Recommendations" : "सिफारिसका लागि प्रयोग गरिएको डेटा"}
-                </h3>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 14 }}>
-                {activeRec.sensor_data_used && Object.entries(activeRec.sensor_data_used).map(([k, v]) => (
-                  <div key={k} style={{ padding: "10px 12px", background: T.cardHover, borderRadius: 10 }}>
-                    <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 3, textTransform: "capitalize" }}>{k.replace(/_/g, " ")}</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "#2d6a2d", fontFamily: F.mono }}>{fmt(v as number, 2)}</div>
+          {/* ── Sensor Data Used ── */}
+          <Card style={{ padding: 24, borderRadius: 20, marginBottom: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${T.violet}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📊</div>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>
+                {t("Data Used for This Report", "यस रिपोर्टका लागि प्रयोग गरिएको डेटा")}
+              </h3>
+              <span style={{ marginLeft: "auto", fontSize: 11, color: T.textMuted }}>
+                {dataSource === "manual" ? t("Manual Input", "म्यानुअल इनपुट") : t("Live Sensor + Weather", "लाइभ सेन्सर + मौसम")}
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12 }}>
+              {Object.entries(report.sensor_data_used).map(([k, v]) => (
+                <div key={k} style={{ padding: "10px 12px", background: T.cardHover, borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 3, textTransform: "capitalize" }}>
+                    {k.replace(/_/g, " ")}
                   </div>
-                ))}
-                {activeRec.weather_data_used && <>
-                  <div style={{ padding: "10px 12px", background: T.cardHover, borderRadius: 10 }}>
-                    <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 3 }}>Weather Temp</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: T.teal, fontFamily: F.mono }}>{fmt(activeRec.weather_data_used.temperature_c, 1)}°C</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#2d6a2d", fontFamily: F.mono }}>
+                    {fmt(v as number, 1)}
                   </div>
-                  <div style={{ padding: "10px 12px", background: T.cardHover, borderRadius: 10 }}>
-                    <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 3 }}>Est. Rainfall</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: T.teal, fontFamily: F.mono }}>{fmt(activeRec.weather_data_used.rainfall_monthly_mm, 0)}mm</div>
-                  </div>
-                </>}
-              </div>
-            </Card>
-          )}
+                </div>
+              ))}
+            </div>
+          </Card>
         </>
       )}
 
+      {/* ── Empty State ── */}
+      {step === "initial" && !loading && (
+        <div style={{
+          padding: "40px 32px", textAlign: "center",
+          background: T.surface, borderRadius: 20,
+          border: `1px dashed ${T.border}`,
+        }}>
+          <div style={{ fontSize: 52, marginBottom: 14 }}>🤖</div>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 8 }}>
+            {t("Ready to analyze your farm", "तपाईंको खेत विश्लेषण गर्न तयार")}
+          </h3>
+          <p style={{ fontSize: 13, color: T.textMuted, maxWidth: 460, margin: "0 auto", lineHeight: 1.7 }}>
+            {t(
+              "Choose your data source above, then click 'Get Crop Recommendation' to start.",
+              "माथि आफ्नो डेटा स्रोत छान्नुहोस्, त्यसपछि 'बाली सिफारिस प्राप्त गर्नुहोस्' क्लिक गर्नुहोस्।"
+            )}
+          </p>
+        </div>
+      )}
+
       <style>{`
-        @keyframes pulseDot { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @media (max-width: 1024px) { .recommendations-grid { grid-template-columns: 1fr !important; } }
-        @media (max-width: 768px)  { .stats-grid { grid-template-columns: repeat(2,1fr) !important; } }
-        @media (max-width: 480px)  { .stats-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </div>
   );

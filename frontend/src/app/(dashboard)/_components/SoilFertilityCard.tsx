@@ -1,6 +1,7 @@
 "use client";
 import { T, F, ConfRow } from "./DashboardComponents";
 import type { Lang } from "./LanguageToggle";
+import AdviceSection from "./AdviceSection";
 
 interface ClassProbs { Low?: number; Medium?: number; High?: number; [k: string]: number | undefined }
 
@@ -12,6 +13,10 @@ interface Props {
   advice?: string;
   explanation?: Record<string, number> | null;
   lang: Lang;
+  adviceEn?: string;
+  adviceNp?: string;
+  adviceSource?: string;
+  embedded?: boolean;  // strips outer card wrapper and header when inside SectionCard
 }
 
 const COLORS: Record<string, string> = {
@@ -32,58 +37,22 @@ const ADVICE_NP: Record<string, string> = {
 
 export default function SoilFertilityCard({
   fertility_class, confidence, confidence_pct, class_probs,
-  advice, explanation, lang,
+  advice, explanation, lang, adviceEn, adviceNp, adviceSource, embedded,
 }: Props) {
   const color = COLORS[fertility_class] ?? T.teal;
   const icon  = FERTILITY_ICON[fertility_class] ?? "🌱";
-
   const barWidth = (v?: number) => `${Math.round((v ?? 0) * 100)}%`;
 
-  return (
-    <div
-      style={{
-        padding: "24px",
-        background: T.surface,
-        borderRadius: "20px",
-        border: `1px solid ${T.border}`,
-        height: "100%",
-      }}
-    >
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: 12,
-          background: `${color}18`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 20,
-        }}>
-          {icon}
-        </div>
-        <div>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 2 }}>
-            {lang === "en" ? "Soil Fertility" : "माटो उर्वरता"}
-          </h3>
-          <p style={{ fontSize: 12, color: T.textMuted }}>
-            {lang === "en" ? "TabNet AI analysis" : "ट्याबनेट एआई विश्लेषण"}
-          </p>
-        </div>
-      </div>
-
+  const content = (
+    <>
       {/* Main prediction */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <div style={{
-          fontSize: 32, fontWeight: 700, color,
-          letterSpacing: "-0.02em",
-        }}>
+        <div style={{ fontSize: 32, fontWeight: 700, color, letterSpacing: "-0.02em" }}>
           {fertility_class}
         </div>
         <span style={{
-          padding: "3px 10px",
-          borderRadius: 20,
-          fontSize: 12,
-          fontWeight: 600,
-          background: `${color}15`,
-          color,
+          padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+          background: `${color}15`, color,
         }}>
           {confidence_pct}
         </span>
@@ -110,8 +79,7 @@ export default function SoilFertilityCard({
                 </div>
                 <div style={{ height: 6, borderRadius: 4, background: `${c2}22` }}>
                   <div style={{
-                    height: "100%", borderRadius: 4,
-                    background: c2,
+                    height: "100%", borderRadius: 4, background: c2,
                     width: barWidth(pct),
                     transition: "width 0.8s cubic-bezier(0.4,0,0.2,1)",
                   }} />
@@ -122,23 +90,19 @@ export default function SoilFertilityCard({
         </div>
       )}
 
-      {/* Advice */}
-      {(advice || ADVICE_NP[fertility_class]) && (
+      {/* Static advice (fallback) */}
+      {!adviceEn && (advice || ADVICE_NP[fertility_class]) && (
         <div style={{
-          marginTop: 14, padding: "10px 12px",
-          borderRadius: 10,
-          background: `${color}08`,
-          border: `1px solid ${color}20`,
+          marginTop: 14, padding: "10px 12px", borderRadius: 10,
+          background: `${color}08`, border: `1px solid ${color}20`,
         }}>
           <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.6, margin: 0 }}>
-            {lang === "en"
-              ? (advice ?? "")
-              : (ADVICE_NP[fertility_class] ?? "")}
+            {lang === "en" ? (advice ?? "") : (ADVICE_NP[fertility_class] ?? "")}
           </p>
         </div>
       )}
 
-      {/* LIME feature importances (compact) */}
+      {/* LIME feature importances */}
       {explanation && Object.keys(explanation).length > 0 && (
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
@@ -170,6 +134,49 @@ export default function SoilFertilityCard({
             })}
         </div>
       )}
+
+      {/* Gemini advice (auto-generated, passed from parent) */}
+      {adviceEn && adviceSource && (
+        <AdviceSection
+          adviceEn={adviceEn}
+          adviceNp={adviceNp ?? ""}
+          source={adviceSource}
+          lang={lang}
+        />
+      )}
+    </>
+  );
+
+  if (embedded) return <>{content}</>;
+
+  return (
+    <div style={{
+      padding: "24px",
+      background: T.surface,
+      borderRadius: "20px",
+      border: `1px solid ${T.border}`,
+      height: "100%",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 12,
+          background: `${color}18`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 20,
+        }}>
+          {icon}
+        </div>
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 2 }}>
+            {lang === "en" ? "Soil Fertility" : "माटो उर्वरता"}
+          </h3>
+          <p style={{ fontSize: 12, color: T.textMuted }}>
+            {lang === "en" ? "TabNet AI analysis" : "ट्याबनेट एआई विश्लेषण"}
+          </p>
+        </div>
+      </div>
+      {content}
     </div>
   );
 }

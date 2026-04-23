@@ -51,6 +51,10 @@ export const postSoilFertility = (body) =>
 export const postExplain = (body) =>
   request("/api/recommend/explain", { method: "POST", body: JSON.stringify(body) });
 
+// ── Complete 4-section report (Step 2 guided workflow) ────────
+export const postCompleteReport = (body) =>
+  request("/api/recommend/complete", { method: "POST", body: JSON.stringify(body) });
+
 // ── On-demand Advice (Gemini) ─────────────────────────────────
 export const postAdvice = (body) =>
   request("/api/recommend/advice", { method: "POST", body: JSON.stringify(body) });

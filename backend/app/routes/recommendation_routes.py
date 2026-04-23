@@ -4,7 +4,9 @@
 # Endpoints:
 #   GET  /api/recommend/full          → all 4 recommendations at once
 #                                       (uses live sensor + weather data)
-#   POST /api/recommend/crop          → crop recommendation (manual input)
+#   POST /api/recommend/crop          → crop recommendation Step 1 (manual input)
+#   POST /api/recommend/complete      → Step 2: full report (fertilizer + irrigation +
+#                                       soil + Gemini advice) after crop confirmed
 #   POST /api/recommend/fertilizer    → fertilizer recommendation
 #   POST /api/recommend/irrigation    → irrigation recommendation (crop-aware)
 #   GET  /api/recommend/status        → ML models load status
@@ -31,6 +33,8 @@ from app.models.recommendation import (
     SoilFertilityRequest,
     SoilFertilityResponse,
     ExplainRequest,
+    CompleteReportRequest,
+    CompleteReportResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -426,6 +430,172 @@ async def recommend_soil(request: SoilFertilityRequest):
     if result is None:
         raise HTTPException(status_code=500, detail="Soil fertility prediction failed.")
     return _format_soil(result)
+
+
+@router.post(
+    "/complete",
+    response_model=CompleteReportResponse,
+    summary="Generate full 4-section report after farmer confirms crop (Step 2)"
+)
+async def generate_complete_report(request: CompleteReportRequest):
+    """
+    Step 2 of the guided ML Advisor workflow.
+
+    Farmer has already confirmed a crop recommendation in Step 1.
+    This endpoint runs fertilizer, irrigation, and soil fertility models
+    using the confirmed crop, then fetches bilingual Gemini advice for all
+    4 sections, saves the complete report to MongoDB, and returns the result.
+
+    All sensor/weather fields are optional — auto-filled from live data if absent.
+    """
+    _require_ml()
+
+    from app.services.advice_service import (
+        get_crop_advice, get_fertilizer_advice,
+        get_irrigation_advice, get_soil_advice,
+    )
+    from app.database.repository import repository
+    from datetime import datetime as _dt
+
+    # ── 1. Resolve sensor / weather values ──────────────────────
+    weather = await weather_service.get_current_weather()
+    latest  = mqtt_module.latest_reading
+
+    def _r(manual, sensor_val, weather_val, default):
+        if manual is not None:
+            return manual
+        if sensor_val is not None:
+            return sensor_val
+        if weather_val is not None:
+            return weather_val
+        return default
+
+    temperature   = _r(request.temperature,   getattr(latest, "temperature_c",     None) if latest else None, getattr(weather, "temperature_c",     None) if weather else None, 25.0)
+    humidity      = _r(request.humidity,      getattr(latest, "humidity_pct",      None) if latest else None, getattr(weather, "humidity_pct",      None) if weather else None, 65.0)
+    soil_moisture = _r(request.soil_moisture, getattr(latest, "soil_moisture_pct", None) if latest else None, None, 50.0)
+    ph            = _r(request.ph,            getattr(latest, "ph_value",          None) if latest else None, None, 6.5)
+    rainfall      = _r(request.rainfall,      None, getattr(weather, "rainfall_monthly_mm", None) if weather else None, 100.0)
+    nitrogen      = request.nitrogen   or 60.0
+    phosphorus    = request.phosphorus or 40.0
+    potassium     = request.potassium  or 40.0
+    soil_type     = request.soil_type  or "Loamy"
+
+    confirmed_crop = request.confirmed_crop
+
+    # ── 2. Run 3 ML models with confirmed crop ───────────────────
+    fert_result = ml_service.predict_fertilizer(
+        temperature = temperature,
+        humidity    = humidity,
+        moisture    = soil_moisture,
+        soil_type   = soil_type,
+        crop_type   = confirmed_crop,
+        nitrogen    = nitrogen,
+        potassium   = potassium,
+        phosphorus  = phosphorus,
+    )
+
+    irrig_result = ml_service.predict_irrigation(
+        soil_moisture = soil_moisture,
+        temperature   = temperature,
+        humidity      = humidity,
+        ph            = ph,
+        rainfall_mm   = rainfall,
+        crop_type     = confirmed_crop,
+        growth_stage  = "mid_season",
+        crop_aware    = True,
+    )
+
+    soil_result = ml_service.predict_soil_fertility(
+        nitrogen   = nitrogen,
+        phosphorus = phosphorus,
+        potassium  = potassium,
+        ph         = ph,
+        moisture   = soil_moisture,
+        explain    = True,
+    )
+
+    if not fert_result or not irrig_result or not soil_result:
+        raise HTTPException(500, "One or more ML models failed to produce a result.")
+
+    fert_fmt  = _format_fertilizer(fert_result)
+    irrig_fmt = _format_irrigation(irrig_result)
+    soil_fmt  = _format_soil(soil_result)
+
+    # ── 3. Fetch bilingual Gemini advice for all 4 sections ──────
+    crop_advice = get_crop_advice(
+        crop       = confirmed_crop,
+        confidence = request.crop_confidence or 0.0,
+        nitrogen   = nitrogen,  phosphorus = phosphorus,
+        potassium  = potassium, temperature = temperature,
+        humidity   = humidity,  ph = ph, rainfall = rainfall,
+    )
+    fert_advice = get_fertilizer_advice(
+        fertilizer = fert_result.fertilizer,
+        confidence = fert_result.confidence,
+        nitrogen   = nitrogen, phosphorus = phosphorus,
+        potassium  = potassium,
+        crop_type  = confirmed_crop,
+        soil_type  = soil_type,
+    )
+    _urgency_to_class = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+    irrig_advice = get_irrigation_advice(
+        irrigation_class = _urgency_to_class.get(irrig_result.urgency, 1),
+        action           = irrig_result.action,
+        confidence       = irrig_result.confidence,
+        soil_moisture    = soil_moisture,
+        temperature      = temperature,
+        crop_type        = confirmed_crop,
+    )
+    soil_advice = get_soil_advice(
+        fertility_class = soil_result.fertility_class,
+        confidence      = soil_result.confidence,
+        nitrogen        = nitrogen, phosphorus = phosphorus,
+        potassium       = potassium, ph = ph, moisture = soil_moisture,
+    )
+
+    advice_bundle = {
+        "crop":       {"advice_en": crop_advice.advice_en,   "advice_np": crop_advice.advice_np,   "source": crop_advice.source},
+        "fertilizer": {"advice_en": fert_advice.advice_en,   "advice_np": fert_advice.advice_np,   "source": fert_advice.source},
+        "irrigation": {"advice_en": irrig_advice.advice_en,  "advice_np": irrig_advice.advice_np,  "source": irrig_advice.source},
+        "soil":       {"advice_en": soil_advice.advice_en,   "advice_np": soil_advice.advice_np,   "source": soil_advice.source},
+    }
+
+    sensor_data_used = {
+        "N": nitrogen, "P": phosphorus, "K": potassium,
+        "ph": ph, "soil_moisture_pct": soil_moisture,
+        "temperature_c": temperature, "humidity_pct": humidity,
+        "rainfall_mm": rainfall,
+    }
+
+    generated_at = _dt.utcnow().isoformat()
+
+    # ── 4. Save complete report to MongoDB ───────────────────────
+    report_data = {
+        "confirmed_crop":   confirmed_crop,
+        "crop_confidence":  request.crop_confidence,
+        "crop_top_3":       request.crop_top_3,
+        "fertilizer":       fert_fmt.model_dump(),
+        "irrigation":       irrig_fmt.model_dump(),
+        "soil":             soil_fmt.model_dump(),
+        "advice":           advice_bundle,
+        "sensor_data_used": sensor_data_used,
+        "generated_at":     generated_at,
+    }
+    report_id = await repository.save_full_report(report_data)
+    report_id = report_id or f"AGS-LOCAL-{_dt.utcnow().strftime('%H%M%S')}"
+
+    return CompleteReportResponse(
+        report_id        = report_id,
+        confirmed_crop   = confirmed_crop,
+        crop_confidence  = request.crop_confidence,
+        crop_top_3       = request.crop_top_3,
+        fertilizer       = fert_fmt.model_dump(),
+        irrigation       = irrig_fmt.model_dump(),
+        soil             = soil_fmt.model_dump(),
+        advice           = advice_bundle,
+        sensor_data_used = sensor_data_used,
+        generated_at     = generated_at,
+    )
 
 
 @router.post(

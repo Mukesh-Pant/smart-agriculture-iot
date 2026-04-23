@@ -185,3 +185,48 @@ class FullRecommendationResponse(BaseModel):
     ml_ready:          bool
     weather_available: bool
     warnings:          list[str] = []
+
+
+# ── Complete Report (2-step guided workflow) ──────────────────
+
+class CompleteReportRequest(BaseModel):
+    """
+    Input for POST /api/recommend/complete — Step 2 of the guided workflow.
+    Farmer has already confirmed a crop in Step 1; this generates the full report.
+    All sensor fields are optional — fall back to live sensor / weather / defaults.
+    """
+    confirmed_crop:   str
+    crop_confidence:  Optional[float] = None
+    crop_top_3:       Optional[list]  = None
+    nitrogen:         Optional[float] = Field(None, ge=0,   le=200)
+    phosphorus:       Optional[float] = Field(None, ge=0,   le=200)
+    potassium:        Optional[float] = Field(None, ge=0,   le=250)
+    temperature:      Optional[float] = Field(None, ge=-10, le=60)
+    humidity:         Optional[float] = Field(None, ge=0,   le=100)
+    ph:               Optional[float] = Field(None, ge=3.5, le=9.0)
+    rainfall:         Optional[float] = Field(None, ge=0,   le=500)
+    soil_moisture:    Optional[float] = Field(None, ge=0,   le=100)
+    soil_type:        Optional[str]   = "Loamy"
+
+
+class SectionAdvice(BaseModel):
+    advice_en: str
+    advice_np: str
+    source:    str  # "gemini" | "template"
+
+
+class CompleteReportResponse(BaseModel):
+    """
+    Full 4-section report returned by POST /api/recommend/complete.
+    Includes ML predictions + Gemini advice for all 4 sections + report_id for history.
+    """
+    report_id:       str
+    confirmed_crop:  str
+    crop_confidence: Optional[float]
+    crop_top_3:      Optional[list]
+    fertilizer:      dict
+    irrigation:      dict
+    soil:            dict
+    advice:          dict   # keys: crop, fertilizer, irrigation, soil → SectionAdvice
+    sensor_data_used: dict
+    generated_at:    str

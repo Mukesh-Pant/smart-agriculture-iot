@@ -278,6 +278,25 @@ class RecommendationRepository:
             logger.error(f"[RecommendationRepo] get_by_report_id failed: {e}")
             return None
 
+    async def save_full_report(self, report_data: dict) -> Optional[str]:
+        """Save a complete 4-section report and return the AGS-formatted report_id."""
+        if self._col is None:
+            return None
+        try:
+            report_id = self._make_report_id()
+            doc = {
+                "report_id":  report_id,
+                "created_at": datetime.utcnow(),
+                "type":       "complete",
+                **report_data,
+            }
+            await self._col.insert_one(doc)
+            logger.info(f"[RecommendationRepo] Full report saved: {report_id}")
+            return report_id
+        except Exception as e:
+            logger.error(f"[RecommendationRepo] save_full_report failed: {e}")
+            return None
+
 
 # =============================================================
 # ALERT REPOSITORY
