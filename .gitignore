@@ -164,7 +164,7 @@ htmlcov/
 .tox/
 
 # Documentation builds
-docs/_build/
+docs/
 site/
 .claude/
 

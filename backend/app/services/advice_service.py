@@ -1,6 +1,6 @@
 # =============================================================
 # app/services/advice_service.py
-# On-demand Gemini 1.5 Flash bilingual advice generator.
+# On-demand Gemini 2.0 Flash bilingual advice generator.
 # Falls back to offline templates when API is unavailable.
 # Called ONLY when farmer clicks "Get Detailed Advice".
 # =============================================================
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 
 @dataclass
