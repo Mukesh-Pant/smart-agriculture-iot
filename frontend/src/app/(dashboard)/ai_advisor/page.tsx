@@ -466,7 +466,7 @@ export default function AIAdvisorPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: "clamp(20px,3vw,28px)", fontWeight: 800, color: T.text, margin: 0, letterSpacing: "-0.02em" }}>
-            🌱 {t("ML Advisor", "एमएल सल्लाहकार")}
+            {t("ML Advisor", "एमएल सल्लाहकार")}
           </h1>
           <p style={{ fontSize: 13, color: T.textMuted, margin: "4px 0 0" }}>
             {t("Independent crop & soil recommendations", "स्वतन्त्र बाली र माटो सिफारिस")}

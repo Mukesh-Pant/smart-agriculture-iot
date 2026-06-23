@@ -50,10 +50,10 @@ export default function SensorsLivePage() {
   const readings = (hist?.readings || []).slice().reverse();
 
   const SENSORS = [
-    { key: "temperature_c" as const, label: "Temperature", unit: "°C", color: T.rose, icon: "🌡️", lo: 0, hi: 50 },
-    { key: "humidity_pct" as const, label: "Humidity", unit: "%", color: T.blue, icon: "💧", lo: 0, hi: 100 },
-    { key: "soil_moisture_pct" as const, label: "Soil Moisture", unit: "%", color: T.accent, icon: "🌱", lo: 0, hi: 100 },
-    { key: "ph_value" as const, label: "Soil pH", unit: "pH", color: T.amber, icon: "⚗️", lo: 0, hi: 14 },
+    { key: "temperature_c" as const, label: "Temperature", unit: "°C", color: T.rose, icon: <Thermometer size={18} />, lo: 0, hi: 50 },
+    { key: "humidity_pct" as const, label: "Humidity", unit: "%", color: T.blue, icon: <Droplets size={18} />, lo: 0, hi: 100 },
+    { key: "soil_moisture_pct" as const, label: "Soil Moisture", unit: "%", color: T.accent, icon: <Sprout size={18} />, lo: 0, hi: 100 },
+    { key: "ph_value" as const, label: "Soil pH", unit: "pH", color: T.amber, icon: <FlaskConical size={18} />, lo: 0, hi: 14 },
   ];
 
   // Get current time for greeting
@@ -488,11 +488,11 @@ export default function SensorsLivePage() {
         color: T.textMuted,
         flexWrap: "wrap",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <span style={{ color: T.accent }}>🟢</span> System Online
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.accent, display: "inline-block" }} /> System Online
         </div>
-        <div>📊 {hist?.total ?? readings.length} readings in database</div>
-        <div>⏱️ Last update: {parseUTC(sensor?.received_at)?.toLocaleTimeString() ?? '—'}</div>
+        <div>{hist?.total ?? readings.length} readings in database</div>
+        <div>Last update: {parseUTC(sensor?.received_at)?.toLocaleTimeString() ?? '—'}</div>
       </div>
 
       {/* Responsive Styles */}
