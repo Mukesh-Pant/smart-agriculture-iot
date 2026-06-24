@@ -4,6 +4,11 @@ import {
   T, F, Card, Err, ConfRow, Badge, Divider, Skeleton, fmt,
 } from "../_components/DashboardComponents";
 import {
+  Sprout, BarChart3, Wheat, Leaf, FlaskConical, Droplets, RefreshCw,
+  FileText, Download, Check, Sparkles, Pencil, AlertTriangle, type LucideIcon,
+} from "lucide-react";
+import { RankIcon } from "../_components/Icons";
+import {
   postCropRecommendation, postCompleteReport, postGenerateReport,
   postFertilizerRecommendation, postIrrigationRecommendation, postSoilFertility,
   getLatestReading, getCurrentWeather,
@@ -63,6 +68,8 @@ interface FertResult {
   top_3_fertilizers?:  Array<{ label: string; probability: number }>;
   advice?:             string;
   npk_status?:         Record<string, string>;
+  crop_aware?:         boolean;
+  crop_used?:          string | null;
 }
 
 interface IrrigResult {
@@ -72,6 +79,8 @@ interface IrrigResult {
   advice?:          string;
   water_amount_mm?: number;
   urgency:          string;
+  crop_aware?:      boolean;
+  crop_used?:       string | null;
 }
 
 type LoadingPanel = "crop" | "soil" | "fert" | "irrig" | "report" | null;
@@ -98,9 +107,9 @@ function TopM({ rank, label, pct, color, selected, onClick }: any) {
       }}
     >
       <span style={{ color: T.textSub, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 16 }}>{["🥇", "🥈", "🥉"][rank]}</span>
+        <RankIcon rank={rank} size={16} />
         <span style={{ textTransform: "capitalize", fontWeight: isSelected ? 700 : 400 }}>{label}</span>
-        {isSelected && <span style={{ fontSize: 10, color, fontWeight: 700 }}>✓ Selected</span>}
+        {isSelected && <span style={{ fontSize: 10, color, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3 }}><Check size={11} strokeWidth={3} /> Selected</span>}
       </span>
       <span style={{ color, fontFamily: F.mono, fontSize: 14, fontWeight: 600 }}>
         {pct}%
@@ -111,6 +120,29 @@ function TopM({ rank, label, pct, color, selected, onClick }: any) {
 
 // ── Main Page ─────────────────────────────────────────────────
 
+// Shows how a fertilizer / irrigation result was generated:
+//  • crop-aware (personalised to the confirmed crop), or
+//  • general (based on current sensor / field readings only).
+function ModeBadge({ cropAware, crop, lang }: { cropAware?: boolean; crop?: string | null; lang: Lang }) {
+  const t = (en: string, np: string) => (lang === "en" ? en : np);
+  const aware = !!cropAware;
+  const color = aware ? "#2d6a2d" : "#64748b";
+  const bg    = aware ? "#e8f4e8" : "#f1f5f9";
+  const Ic    = aware ? Sprout : BarChart3;
+  const label = aware
+    ? `${t("Crop-aware", "बाली-सचेत")}${crop ? ` · ${crop}` : ""}`
+    : t("General (sensor-based)", "सामान्य (सेन्सर-आधारित)");
+  return (
+    <div style={{
+      display: "inline-flex", alignItems: "center", gap: 6,
+      fontSize: 11, fontWeight: 700, color, background: bg,
+      border: `1px solid ${color}33`, borderRadius: 7,
+      padding: "3px 9px", marginBottom: 12, textTransform: "capitalize",
+    }}>
+      <Ic size={13} strokeWidth={2.5} /> {label}
+    </div>
+  );
+}
 export default function AIAdvisorPage() {
   const [cropResult,    setCropResult]    = useState<CropResult | null>(null);
   const [soilResult,    setSoilResult]    = useState<SoilResult | null>(null);
@@ -232,6 +264,7 @@ export default function AIAdvisorPage() {
         ph:          manualInput.ph,
       };
       body.crop_type = confirmedCrop ?? "General";
+      body.crop_aware = !!confirmedCrop;
       const result = await postFertilizerRecommendation(body);
       setFertResult(result);
     } catch (e: any) {
@@ -342,9 +375,9 @@ export default function AIAdvisorPage() {
   const t = (en: string, np: string) => lang === "en" ? en : np;
 
   function SectionCard({
-    icon, iconBg, title, subtitle, accentColor, children,
+    icon: Icon, iconBg, title, subtitle, accentColor, children,
   }: {
-    icon: string; iconBg: string; title: string; subtitle: string;
+    icon: LucideIcon; iconBg: string; title: string; subtitle: string;
     accentColor: string; children: React.ReactNode;
   }) {
     return (
@@ -367,9 +400,8 @@ export default function AIAdvisorPage() {
               width: 42, height: 42, borderRadius: 12,
               background: iconBg,
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 22,
             }}>
-              {icon}
+              <Icon size={22} color={accentColor} strokeWidth={2} />
             </div>
             <div>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: 0 }}>{title}</h3>
@@ -385,11 +417,11 @@ export default function AIAdvisorPage() {
   }
 
   function IndependentPanel({
-    panelTitle, subtitle, icon, accentColor,
+    panelTitle, subtitle, icon: Icon, accentColor,
     buttonLabel, isLoading, disabled, onRun,
     cropNote, children,
   }: {
-    panelTitle: string; subtitle: string; icon: string; accentColor: string;
+    panelTitle: string; subtitle: string; icon: LucideIcon; accentColor: string;
     buttonLabel: string; isLoading: boolean; disabled: boolean; onRun: () => void;
     cropNote?: string; children?: React.ReactNode;
   }) {
@@ -409,9 +441,9 @@ export default function AIAdvisorPage() {
           <div style={{
             width: 40, height: 40, borderRadius: 10,
             background: `${accentColor}18`,
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+            display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            {icon}
+            <Icon size={20} color={accentColor} strokeWidth={2} />
           </div>
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>{panelTitle}</h3>
@@ -424,9 +456,9 @@ export default function AIAdvisorPage() {
             <div style={{
               fontSize: 11, color: accentColor, fontWeight: 600,
               marginBottom: 12, padding: "4px 10px", borderRadius: 6,
-              background: `${accentColor}10`, display: "inline-block",
+              background: `${accentColor}10`, display: "inline-flex", alignItems: "center", gap: 6,
             }}>
-              🌱 {cropNote}
+              <Sprout size={13} strokeWidth={2.5} /> {cropNote}
             </div>
           )}
           <button
@@ -446,8 +478,8 @@ export default function AIAdvisorPage() {
             }}
           >
             {isLoading
-              ? <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>{t("Analyzing…", "विश्लेषण गर्दै…")}</>
-              : <><span>{icon}</span>{buttonLabel}</>
+              ? <><RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} />{t("Analyzing…", "विश्लेषण गर्दै…")}</>
+              : <><Icon size={16} strokeWidth={2.2} />{buttonLabel}</>
             }
           </button>
           {children}
@@ -465,8 +497,8 @@ export default function AIAdvisorPage() {
       {/* ── Page Header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: "clamp(20px,3vw,28px)", fontWeight: 800, color: T.text, margin: 0, letterSpacing: "-0.02em" }}>
-            🌱 {t("ML Advisor", "एमएल सल्लाहकार")}
+          <h1 style={{ fontSize: "clamp(20px,3vw,28px)", fontWeight: 800, color: T.text, margin: 0, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}>
+            <Sprout size={26} color="#2d6a2d" strokeWidth={2.2} /> {t("ML Advisor", "एमएल सल्लाहकार")}
           </h1>
           <p style={{ fontSize: 13, color: T.textMuted, margin: "4px 0 0" }}>
             {t("Independent crop & soil recommendations", "स्वतन्त्र बाली र माटो सिफारिस")}
@@ -488,7 +520,7 @@ export default function AIAdvisorPage() {
                 opacity: pdfBusy ? 0.7 : 1,
               }}
             >
-              {pdfBusy ? "⟳" : "📄"} {t("Download PDF", "PDF डाउनलोड")}
+              {pdfBusy ? <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Download size={14} />} {t("Download PDF", "PDF डाउनलोड")}
             </button>
           )}
           {!allEmpty && (
@@ -498,9 +530,10 @@ export default function AIAdvisorPage() {
                 padding: "9px 16px", background: T.surface,
                 border: `1px solid ${T.border}`, borderRadius: 10,
                 color: T.text, fontSize: 13, fontWeight: 500, cursor: "pointer",
+                display: "inline-flex", alignItems: "center", gap: 6,
               }}
             >
-              🔄 {t("Reset All", "सबै रिसेट गर्नुहोस्")}
+              <RefreshCw size={14} /> {t("Reset All", "सबै रिसेट गर्नुहोस्")}
             </button>
           )}
         </div>
@@ -535,7 +568,7 @@ export default function AIAdvisorPage() {
             >
               {src === "live"
                 ? <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", boxShadow: "0 0 0 2px #22c55e40" }} />{t("Live Sensor", "लाइभ सेन्सर")}</>
-                : <><span>✏️</span>{t("Manual Input", "म्यानुअल इनपुट")}</>
+                : <><Pencil size={14} />{t("Manual Input", "म्यानुअल इनपुट")}</>
               }
             </button>
           ))}
@@ -576,8 +609,9 @@ export default function AIAdvisorPage() {
                 fontSize: 12, color: "#92400e", background: "#fffbeb",
                 border: "1px solid #fde68a", borderRadius: 10,
                 padding: "10px 14px", marginBottom: 12,
+                display: "flex", alignItems: "center", gap: 8,
               }}>
-                ⚠️ {liveNotice}
+                <AlertTriangle size={15} style={{ flexShrink: 0 }} /> {liveNotice}
               </div>
             )}
 
@@ -601,8 +635,8 @@ export default function AIAdvisorPage() {
         {/* Crop Panel */}
         <IndependentPanel
           panelTitle={t("Crop Recommendation", "बाली सिफारिस")}
-          subtitle={t("SwiFT Transformer AI", "स्विफ्ट ट्रान्सफर्मर एआई")}
-          icon="🌾" accentColor="#2d6a2d"
+          subtitle={t("Ensemble AI (RF + XGBoost + LightGBM)", "इन्सेम्बल एआई (RF + XGBoost + LightGBM)")}
+          icon={Wheat} accentColor="#2d6a2d"
           buttonLabel={t("Get Crop Recommendation", "बाली सिफारिस प्राप्त गर्नुहोस्")}
           isLoading={loadingPanel === "crop"}
           disabled={loadingPanel !== null}
@@ -627,8 +661,8 @@ export default function AIAdvisorPage() {
                 </p>
               )}
               {confirmedCrop && (
-                <div style={{ marginTop: 8, fontSize: 12, color: "#2d6a2d", fontWeight: 600 }}>
-                  ✓ {confirmedCrop} {t("confirmed", "पुष्टि भयो")}
+                <div style={{ marginTop: 8, fontSize: 12, color: "#2d6a2d", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                  <Check size={13} strokeWidth={3} /> {confirmedCrop} {t("confirmed", "पुष्टि भयो")}
                 </div>
               )}
             </div>
@@ -639,7 +673,7 @@ export default function AIAdvisorPage() {
         <IndependentPanel
           panelTitle={t("Soil Fertility", "माटो उर्वरता")}
           subtitle={t("TabNet AI + LIME Explanation", "ट्याबनेट एआई + LIME व्याख्या")}
-          icon="🌿" accentColor="#7c3aed"
+          icon={Leaf} accentColor="#7c3aed"
           buttonLabel={t("Analyze Soil Fertility", "माटो उर्वरता विश्लेषण गर्नुहोस्")}
           isLoading={loadingPanel === "soil"}
           disabled={loadingPanel !== null}
@@ -663,7 +697,7 @@ export default function AIAdvisorPage() {
         <IndependentPanel
           panelTitle={t("Fertilizer", "मलखाद")}
           subtitle={t("TabNet AI + NPK Analysis", "ट्याबनेट एआई + एनपीके विश्लेषण")}
-          icon="🧪" accentColor={T.amber}
+          icon={FlaskConical} accentColor={T.amber}
           buttonLabel={t("Get Fertilizer Advice", "मलखाद सल्लाह प्राप्त गर्नुहोस्")}
           isLoading={loadingPanel === "fert"}
           disabled={loadingPanel !== null}
@@ -672,6 +706,7 @@ export default function AIAdvisorPage() {
         >
           {fertResult && (
             <>
+              <ModeBadge cropAware={fertResult.crop_aware} crop={fertResult.crop_used} lang={lang} />
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: T.amber }}>{fertResult.fertilizer}</div>
                 <Badge text={fertResult.confidence_pct} color={T.amber} size="sm" />
@@ -698,7 +733,7 @@ export default function AIAdvisorPage() {
         <IndependentPanel
           panelTitle={t("Irrigation", "सिँचाई")}
           subtitle={t("FT-Transformer AI (crop-aware)", "एफटी-ट्रान्सफर्मर एआई (बाली-सचेत)")}
-          icon="💧" accentColor={T.accent}
+          icon={Droplets} accentColor={T.accent}
           buttonLabel={t("Get Irrigation Advice", "सिँचाई सल्लाह प्राप्त गर्नुहोस्")}
           isLoading={loadingPanel === "irrig"}
           disabled={loadingPanel !== null}
@@ -710,6 +745,7 @@ export default function AIAdvisorPage() {
             const c = uc[urgency] ?? T.teal;
             return (
               <>
+                <ModeBadge cropAware={irrigResult.crop_aware} crop={irrigResult.crop_used} lang={lang} />
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <Badge text={urgency.toUpperCase()} color={c} size="sm" />
                 </div>
@@ -755,7 +791,7 @@ export default function AIAdvisorPage() {
               fontSize: 13, fontWeight: 700, flexShrink: 0,
               border: `2px solid #2d6a2d`,
             }}>
-              {report ? "✓" : "★"}
+              {report ? <Check size={15} strokeWidth={3} /> : <Sparkles size={14} />}
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
@@ -785,10 +821,10 @@ export default function AIAdvisorPage() {
             }}
           >
             {loadingPanel === "report"
-              ? <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>{t("Generating report…", "रिपोर्ट तयार गर्दै…")}</>
+              ? <><RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} />{t("Generating report…", "रिपोर्ट तयार गर्दै…")}</>
               : report
-              ? <><span>✓</span>{t("Report Generated", "रिपोर्ट तयार भयो")}</>
-              : <><span>📊</span>{t("Generate Full Report", "पूर्ण रिपोर्ट बनाउनुहोस्")}</>
+              ? <><Check size={15} strokeWidth={3} />{t("Report Generated", "रिपोर्ट तयार भयो")}</>
+              : <><FileText size={15} />{t("Generate Full Report", "पूर्ण रिपोर्ट बनाउनुहोस्")}</>
             }
           </button>
 
@@ -801,7 +837,7 @@ export default function AIAdvisorPage() {
                 t("Generating bilingual advice…", "द्विभाषी सल्लाह तयार गर्दै…"),
               ].map((msg, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, color: T.textMuted, fontSize: 12 }}>
-                  <span style={{ animation: "spin 1.2s linear infinite", display: "inline-block", animationDelay: `${i * 0.2}s` }}>⟳</span>
+                  <RefreshCw size={12} style={{ animation: "spin 1.2s linear infinite", animationDelay: `${i * 0.2}s` }} />
                   {msg}
                 </div>
               ))}
@@ -820,7 +856,7 @@ export default function AIAdvisorPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20, marginBottom: 20 }} className="recommendations-grid">
 
             {/* Crop Card */}
-            <SectionCard icon="🌾" iconBg="#2d6a2d18" title={t("Crop Recommendation", "बाली सिफारिस")} subtitle={t("SwiFT Transformer AI", "स्विफ्ट ट्रान्सफर्मर एआई")} accentColor="#2d6a2d">
+            <SectionCard icon={Wheat} iconBg="#2d6a2d18" title={t("Crop Recommendation", "बाली सिफारिस")} subtitle={t("Ensemble AI (RF + XGBoost + LightGBM)", "इन्सेम्बल एआई (RF + XGBoost + LightGBM)")} accentColor="#2d6a2d">
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
                 <div style={{ fontSize: 32, fontWeight: 800, color: "#2d6a2d", textTransform: "capitalize" }}>{report.confirmed_crop}</div>
                 <Badge text={`${Math.round((report.crop_confidence ?? 0) * 100)}% Match`} color="#2d6a2d" size="sm" />
@@ -834,7 +870,7 @@ export default function AIAdvisorPage() {
                   </div>
                   {report.crop_top_3.map((c, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${T.border}` }}>
-                      <span style={{ color: T.textMuted, fontSize: 13 }}>{["🥇","🥈","🥉"][i]} <span style={{ textTransform: "capitalize" }}>{c.label}</span></span>
+                      <span style={{ color: T.textMuted, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}><RankIcon rank={i} /> <span style={{ textTransform: "capitalize" }}>{c.label}</span></span>
                       <span style={{ color: "#2d6a2d", fontFamily: F.mono, fontWeight: 600, fontSize: 13 }}>{Math.round(c.probability * 100)}%</span>
                     </div>
                   ))}
@@ -845,7 +881,7 @@ export default function AIAdvisorPage() {
 
             {/* Soil Card */}
             <SectionCard
-              icon="🌿"
+              icon={Leaf}
               iconBg={`${({"High":"#2d6a2d","Medium":"#d97706","Low":"#dc2626"} as any)[report.soil?.fertility_class] ?? T.teal}18`}
               title={t("Soil Fertility", "माटो उर्वरता")}
               subtitle={t("TabNet AI + LIME Explanation", "ट्याबनेट एआई + LIME व्याख्या")}
@@ -871,7 +907,7 @@ export default function AIAdvisorPage() {
               const urgency = report.irrigation?.urgency as "low" | "medium" | "high" ?? "low";
               const c = uc[urgency] ?? T.teal;
               return (
-                <SectionCard icon="💧" iconBg={`${c}18`} title={t("Irrigation", "सिँचाई")} subtitle={t("FT-Transformer AI (crop-aware)", "एफटी-ट्रान्सफर्मर एआई (बाली-सचेत)")} accentColor={c}>
+                <SectionCard icon={Droplets} iconBg={`${c}18`} title={t("Irrigation", "सिँचाई")} subtitle={t("FT-Transformer AI (crop-aware)", "एफटी-ट्रान्सफर्मर एआई (बाली-सचेत)")} accentColor={c}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
                     <Badge text={urgency.toUpperCase()} color={c} size="sm" />
                   </div>
@@ -895,7 +931,7 @@ export default function AIAdvisorPage() {
             })()}
 
             {/* Fertilizer Card */}
-            <SectionCard icon="🧪" iconBg={`${T.amber}18`} title={t("Fertilizer", "मलखाद")} subtitle={t("TabNet AI + NPK Analysis", "ट्याबनेट एआई + एनपीके विश्लेषण")} accentColor={T.amber}>
+            <SectionCard icon={FlaskConical} iconBg={`${T.amber}18`} title={t("Fertilizer", "मलखाद")} subtitle={t("TabNet AI + NPK Analysis", "ट्याबनेट एआई + एनपीके विश्लेषण")} accentColor={T.amber}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
                 <div style={{ fontSize: 26, fontWeight: 800, color: T.amber }}>{report.fertilizer.fertilizer}</div>
                 <Badge text={report.fertilizer.confidence_pct} color={T.amber} size="sm" />
@@ -924,7 +960,7 @@ export default function AIAdvisorPage() {
                   </div>
                   {report.fertilizer.top_3_fertilizers.map((f: any, i: number) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${T.border}` }}>
-                      <span style={{ color: T.textMuted, fontSize: 13 }}>{["🥇","🥈","🥉"][i]} {f.label}</span>
+                      <span style={{ color: T.textMuted, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}><RankIcon rank={i} /> {f.label}</span>
                       <span style={{ color: T.amber, fontFamily: F.mono, fontWeight: 600, fontSize: 13 }}>{Math.round(f.probability * 100)}%</span>
                     </div>
                   ))}
@@ -937,7 +973,7 @@ export default function AIAdvisorPage() {
           {/* Sensor Data Used */}
           <Card style={{ padding: 24, borderRadius: 20, marginBottom: 24 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${T.violet}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📊</div>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${T.violet}15`, display: "flex", alignItems: "center", justifyContent: "center" }}><BarChart3 size={18} color={T.violet} /></div>
               <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>
                 {t("Data Used for This Report", "यस रिपोर्टका लागि प्रयोग गरिएको डेटा")}
               </h3>
@@ -968,7 +1004,7 @@ export default function AIAdvisorPage() {
           background: T.surface, borderRadius: 20,
           border: `1px dashed ${T.border}`,
         }}>
-          <div style={{ fontSize: 52, marginBottom: 14 }}>🤖</div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><Sparkles size={48} color={T.textDim} strokeWidth={1.5} /></div>
           <h3 style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 8 }}>
             {t("Ready to analyze your farm", "तपाईंको खेत विश्लेषण गर्न तयार")}
           </h3>
