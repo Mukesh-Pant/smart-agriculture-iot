@@ -25,7 +25,13 @@ import {
   fmt,
   ago,
   hhmm,
+  parseUTC,
 } from "../_components/DashboardComponents";
+
+// A reading is considered "live" if it arrived within this window.
+// ESP32 publishes every 10s (SENSOR_READ_INTERVAL), so 30s tolerates
+// a couple of missed packets before flagging the system offline.
+const LIVE_WINDOW_MS = 30_000;
 import { usePolling } from "@/app/hooks/useApi";
 import {
   Thermometer,
@@ -162,6 +168,12 @@ export default function OverviewPage() {
     0;
   const avgHumidity =
     series.reduce((acc, curr) => acc + (curr.hum || 0), 0) / series.length || 0;
+
+  // System is "live" only if the most recent reading is fresh (not just present).
+  const lastReadingAt = parseUTC(sensor?.received_at);
+  const isLive = lastReadingAt
+    ? Date.now() - lastReadingAt.getTime() < LIVE_WINDOW_MS
+    : false;
 
   return (
     <div style={{ backgroundColor: T.bg, minHeight: "100vh", padding: "24px" }}>
@@ -359,10 +371,10 @@ export default function OverviewPage() {
               style={{
                 fontSize: "24px",
                 fontWeight: "600",
-                color: sensor ? T.accent : T.rose,
+                color: isLive ? T.accent : T.rose,
               }}
             >
-              {sensor ? "Active" : "Waiting"}
+              {isLive ? "Active" : "Offline"}
             </div>
           </div>
         </div>

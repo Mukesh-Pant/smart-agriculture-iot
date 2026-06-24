@@ -49,6 +49,14 @@ export default function SensorsLivePage() {
 
   const readings = (hist?.readings || []).slice().reverse();
 
+  // System is "live" only when the latest reading is fresh, not merely present.
+  // ESP32 publishes every 10s; 30s tolerates a couple of missed packets.
+  const LIVE_WINDOW_MS = 30_000;
+  const lastReadingAt = parseUTC(sensor?.received_at);
+  const isLive = lastReadingAt
+    ? Date.now() - lastReadingAt.getTime() < LIVE_WINDOW_MS
+    : false;
+
   const SENSORS = [
     { key: "temperature_c" as const, label: "Temperature", unit: "°C", color: T.rose, icon: Thermometer, lo: 0, hi: 50 },
     { key: "humidity_pct" as const, label: "Humidity", unit: "%", color: T.blue, icon: Droplets, lo: 0, hi: 100 },
@@ -117,8 +125,8 @@ export default function SensorsLivePage() {
             boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.05)",
           }}>
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "20px", fontWeight: "600", color: T.accent }}>
-                {hist?.readings && (hist.readings as SensorReading[]).length > 0 ? "Active" : "Waiting"}
+              <div style={{ fontSize: "20px", fontWeight: "600", color: isLive ? T.accent : T.rose }}>
+                {isLive ? "Active" : "Offline"}
               </div>
               <div style={{ fontSize: "11px", color: T.textMuted }}>Status</div>
             </div>
@@ -496,8 +504,8 @@ export default function SensorsLivePage() {
             width: "8px",
             height: "8px",
             borderRadius: "50%",
-            background: T.accent,
-          }} /> System Online
+            background: isLive ? T.accent : T.rose,
+          }} /> {isLive ? "System Online" : "System Offline"}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
           <BarChart3 size={14} color={T.textMuted} strokeWidth={2} /> {hist?.total ?? readings.length} readings in database
