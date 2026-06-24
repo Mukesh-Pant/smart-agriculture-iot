@@ -3,6 +3,23 @@ import UserModel, { USER_ROLES } from "../../models/userModel.js";
 import { sendApprovalEmail } from "../../utils/mailer.js";
 
 /**
+ * Privilege guard. Returns an error string if `actor` may NOT perform a
+ * mutating action on `target`, otherwise null.
+ *
+ * Rules:
+ *  - Owner is root: may act on anyone (including other owners).
+ *  - Admin may act on farmers and other admins, but NEVER on an owner.
+ *  - Nobody may perform destructive self-actions (handled per-route).
+ */
+function denyIfCannotManage(actor, target) {
+  if (actor.user_role === "owner") return null; // root — full power
+  if (target.user_role === "owner") {
+    return "Only the owner can manage an owner account.";
+  }
+  return null;
+}
+
+/**
  * GET /api/admin/users?status=&role=&q=
  * Lists all users with optional filters. Admin/owner only.
  */
@@ -102,23 +119,34 @@ export async function rejectUser(req, res) {
         .json({ success: false, error: true, message: "Invalid user id." });
     }
 
-    const user = await UserModel.findByIdAndUpdate(
-      id,
-      { status: "rejected", approvedBy: req.user.id, approvedAt: new Date() },
-      { new: true }
-    );
-
-    if (!user) {
+    const target = await UserModel.findById(id);
+    if (!target) {
       return res
         .status(404)
         .json({ success: false, error: true, message: "User not found." });
     }
+    const rejectDenied = denyIfCannotManage(req.user, target);
+    if (rejectDenied) {
+      return res.status(403).json({ success: false, error: true, message: rejectDenied });
+    }
+    if (target.user_role === "owner") {
+      return res.status(403).json({
+        success: false,
+        error: true,
+        message: "An owner account cannot be rejected.",
+      });
+    }
+
+    target.status = "rejected";
+    target.approvedBy = req.user.id;
+    target.approvedAt = new Date();
+    await target.save();
 
     return res.json({
       success: true,
       error: false,
       message: "User rejected.",
-      data: { id: user._id, status: user.status },
+      data: { id: target._id, status: target.status },
     });
   } catch (err) {
     console.error("rejectUser error:", err);
@@ -146,6 +174,10 @@ export async function suspendUser(req, res) {
       return res
         .status(404)
         .json({ success: false, error: true, message: "User not found." });
+    }
+    const suspendDenied = denyIfCannotManage(req.user, target);
+    if (suspendDenied) {
+      return res.status(403).json({ success: false, error: true, message: suspendDenied });
     }
     if (target.user_role === "owner") {
       return res.status(403).json({
@@ -195,6 +227,19 @@ export async function setUserRole(req, res) {
       });
     }
 
+    const target = await UserModel.findById(id);
+    if (!target) {
+      return res
+        .status(404)
+        .json({ success: false, error: true, message: "User not found." });
+    }
+
+    // Guard: an admin may never modify an owner (prevents demoting the root).
+    const roleDenied = denyIfCannotManage(req.user, target);
+    if (roleDenied) {
+      return res.status(403).json({ success: false, error: true, message: roleDenied });
+    }
+
     // Privilege rule: granting admin/owner requires the actor to be owner.
     const actorRole = req.user.user_role;
     if ((role === "owner" || role === "admin") && actorRole !== "owner") {
@@ -205,23 +250,14 @@ export async function setUserRole(req, res) {
       });
     }
 
-    const user = await UserModel.findByIdAndUpdate(
-      id,
-      { user_role: role },
-      { new: true }
-    );
-
-    if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, error: true, message: "User not found." });
-    }
+    target.user_role = role;
+    await target.save();
 
     return res.json({
       success: true,
       error: false,
       message: "Role updated.",
-      data: { id: user._id, user_role: user.user_role },
+      data: { id: target._id, user_role: target.user_role },
     });
   } catch (err) {
     console.error("setUserRole error:", err);
@@ -259,15 +295,13 @@ export async function deleteUser(req, res) {
         .status(404)
         .json({ success: false, error: true, message: "User not found." });
     }
-    if (target.user_role === "owner") {
-      return res.status(403).json({
-        success: false,
-        error: true,
-        message: "Owner accounts cannot be deleted.",
-      });
-    }
 
-    // Only the owner may delete an admin.
+    // Owner is root: may delete anyone (incl. other owners) except self.
+    // Admin may NOT delete an owner, and only the owner may delete an admin.
+    const deleteDenied = denyIfCannotManage(req.user, target);
+    if (deleteDenied) {
+      return res.status(403).json({ success: false, error: true, message: deleteDenied });
+    }
     if (target.user_role === "admin" && req.user.user_role !== "owner") {
       return res.status(403).json({
         success: false,

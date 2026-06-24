@@ -12,7 +12,7 @@
 #   POST /api/sensors/simulate        → inject test reading
 # =============================================================
 
-from fastapi import APIRouter, HTTPException, Query, Path
+from fastapi import APIRouter, HTTPException, Query, Path, Depends
 from datetime import datetime
 from typing import Optional
 
@@ -24,6 +24,7 @@ from app.models.sensor_data import (
 from app.services import mqtt_service as mqtt_module
 from app.database.repository import sensor_repository
 from app.database.mongodb import is_connected
+from app.core.auth import get_current_user, resolve_device_scope, CurrentUser
 
 router = APIRouter(prefix="/api/sensors", tags=["Sensor Data"])
 
@@ -33,14 +34,20 @@ router = APIRouter(prefix="/api/sensors", tags=["Sensor Data"])
     response_model=LatestReadingResponse,
     summary="Get the most recent sensor reading"
 )
-async def get_latest_reading():
+async def get_latest_reading(
+    device_id: Optional[str] = Query(default=None, description="Device to read (privileged users only)"),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
-    Returns the most recent sensor reading.
-    Tries MongoDB first (persistent), falls back to in-memory cache.
+    Returns the most recent sensor reading for the user's allowed device.
+    Farmers are restricted to their assigned device; owners/admins may read
+    any device (or all). Tries MongoDB first, falls back to in-memory cache.
     """
+    scope = resolve_device_scope(user, device_id)
+
     # Try MongoDB first — it survives server restarts
     if is_connected():
-        doc = await sensor_repository.get_latest()
+        doc = await sensor_repository.get_latest(device_id=scope)
         if doc:
             return LatestReadingResponse(
                 device_id         = doc.get("device_id"),
@@ -62,6 +69,13 @@ async def get_latest_reading():
             status_code=404,
             detail="No sensor data received yet. "
                    "Ensure ESP32 is running and MQTT broker is active."
+        )
+
+    # Honour device scope on the in-memory fallback too.
+    if scope and reading.device_id != scope:
+        raise HTTPException(
+            status_code=404,
+            detail="No sensor data available for your assigned device yet."
         )
 
     return LatestReadingResponse(
@@ -86,18 +100,21 @@ async def get_latest_reading():
 async def get_reading_history(
     page:      int = Query(default=1,  ge=1,   description="Page number"),
     limit:     int = Query(default=20, ge=1, le=500, description="Readings per page"),
-    device_id: Optional[str] = Query(default=None,  description="Filter by device ID")
+    device_id: Optional[str] = Query(default=None,  description="Device to read (privileged users only)"),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
-    Returns paginated sensor readings from MongoDB, newest first.
-    Falls back to in-memory history if MongoDB is unavailable.
+    Returns paginated sensor readings, newest first, scoped to the device(s)
+    the user is allowed to read. Falls back to in-memory if Mongo is down.
     """
+    scope = resolve_device_scope(user, device_id)
+
     if is_connected():
         skip  = (page - 1) * limit
         docs  = await sensor_repository.get_history(
-            limit=limit, skip=skip, device_id=device_id
+            limit=limit, skip=skip, device_id=scope
         )
-        total = await sensor_repository.count_readings(device_id=device_id)
+        total = await sensor_repository.count_readings(device_id=scope)
 
         readings = []
         for doc in docs:
@@ -112,6 +129,8 @@ async def get_reading_history(
 
     # Fallback: in-memory
     history = mqtt_module.reading_history
+    if scope:
+        history = [r for r in history if getattr(r, "device_id", None) == scope]
     if not history:
         raise HTTPException(status_code=404, detail="No sensor history available yet.")
 

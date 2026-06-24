@@ -1,13 +1,14 @@
 import jwt from "jsonwebtoken";
+import UserModel from "../models/userModel.js";
 
 /**
  * GET /api/settingCookies
  * Header: Authorization: Bearer <backendToken>
  *
- * The backend JWT is minted at login (POST /api/auth/login) and carried in
- * the NextAuth session. This endpoint verifies that token and re-issues it
- * as an httpOnly `backend_token` cookie so the browser automatically sends
- * it on subsequent same-site API calls (onboarding, admin, etc).
+ * Verifies the login-issued JWT, then re-issues a fresh httpOnly
+ * `backend_token` cookie with the user's CURRENT role, status, and device
+ * assignments (re-read from the DB). This keeps device-access claims fresh
+ * after an admin reassigns devices — the user just needs to revisit.
  */
 async function SettingCookies(req, res) {
   try {
@@ -34,13 +35,31 @@ async function SettingCookies(req, res) {
       });
     }
 
-    // Re-sign a fresh 1d token so cookie + payload stay consistent.
+    // Re-read the live user so claims (role/status/devices) are current.
+    const user = await UserModel.findById(decoded.id).lean();
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, error: true, message: "User not found." });
+    }
+
+    // A suspended/rejected user must not keep a working session cookie.
+    if (user.status !== "approved") {
+      return res.status(403).json({
+        success: false,
+        error: true,
+        message: "Account is not active.",
+      });
+    }
+
     const token = jwt.sign(
       {
-        id: decoded.id,
-        email: decoded.email,
-        user_role: decoded.user_role,
-        status: decoded.status,
+        id: user._id,
+        email: user.email,
+        user_role: user.user_role,
+        status: user.status,
+        device_id: user.device_id || null,
+        devices: Array.isArray(user.devices) ? user.devices : [],
       },
       process.env.TOKEN_SECRET_KEY,
       { expiresIn: "1d" }

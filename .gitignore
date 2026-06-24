@@ -208,3 +208,4 @@ id_rsa.pub
 
 # GitHub Actions artifacts
 .github/workflows/*.log
+docs/FINAL_REPORT.md
