@@ -1,0 +1,27 @@
+Crop Ensemble Recommendation Results
+Accuracy: 95.15%
+
+              precision    recall  f1-score   support
+
+       apple       1.00      1.00      1.00        15
+      banana       1.00      1.00      1.00        15
+   blackgram       1.00      1.00      1.00        15
+    chickpea       1.00      1.00      1.00        15
+        jute       0.79      1.00      0.88        15
+ kidneybeans       1.00      1.00      1.00        15
+      lentil       1.00      1.00      1.00        15
+       maize       1.00      1.00      1.00        15
+       mango       1.00      1.00      1.00        15
+    mungbean       1.00      1.00      1.00        15
+     mustard       0.88      0.70      0.78        30
+      orange       1.00      1.00      1.00        15
+  pigeonpeas       1.00      1.00      1.00        15
+      potato       1.00      1.00      1.00        30
+        rice       1.00      0.73      0.85        15
+     soybean       1.00      1.00      1.00        30
+  watermelon       1.00      1.00      1.00        15
+       wheat       0.75      0.90      0.82        30
+
+    accuracy                           0.95       330
+   macro avg       0.97      0.96      0.96       330
+weighted avg       0.96      0.95      0.95       330
