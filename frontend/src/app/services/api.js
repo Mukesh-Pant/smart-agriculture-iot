@@ -42,6 +42,7 @@ export const getSystemStatus    = ()              => request("/api/sensors/statu
 // ── Analytics ─────────────────────────────────────────────────
 export const getDailySummary    = (date)          => request(`/api/analytics/summary/daily${date ? `?date=${date}` : ""}`);
 export const getWeeklySummary   = ()              => request("/api/analytics/summary/week");
+export const getTrends          = (range = "7d")  => request(`/api/analytics/trends?range=${range}`);
 
 // ── Weather ───────────────────────────────────────────────────
 export const getCurrentWeather  = ()              => request("/api/weather/current");

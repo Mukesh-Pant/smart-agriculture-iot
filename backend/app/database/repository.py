@@ -173,6 +173,64 @@ class SensorRepository:
             logger.error(f"[Repository] count_readings failed: {e}")
             return 0
 
+    async def get_trends(self, start, unit="day", device_id=None) -> list:
+        """
+        Time-bucketed trend aggregation for the analytics page.
+
+        Buckets readings from `start` until now into `unit`-sized windows
+        ("hour" | "day" | "week") using a single $dateTrunc aggregation —
+        all work happens in MongoDB, so it scales to months of data with
+        one query (vs. one query per day).
+
+        Returns an ordered list of buckets, each with avg/min/max per metric.
+        """
+        if self._col is None:
+            return []
+        try:
+            match = {"$match": {"received_at": {"$gte": start}}}
+            if device_id:
+                match["$match"]["device_id"] = device_id
+
+            pipeline = [
+                match,
+                {"$group": {
+                    "_id": {"$dateTrunc": {"date": "$received_at", "unit": unit}},
+                    "total_readings":  {"$sum": 1},
+                    "avg_temperature": {"$avg": "$temperature_c"},
+                    "min_temperature": {"$min": "$temperature_c"},
+                    "max_temperature": {"$max": "$temperature_c"},
+                    "avg_humidity":    {"$avg": "$humidity_pct"},
+                    "min_humidity":    {"$min": "$humidity_pct"},
+                    "max_humidity":    {"$max": "$humidity_pct"},
+                    "avg_moisture":    {"$avg": "$soil_moisture_pct"},
+                    "min_moisture":    {"$min": "$soil_moisture_pct"},
+                    "max_moisture":    {"$max": "$soil_moisture_pct"},
+                    "avg_ph":          {"$avg": "$ph_value"},
+                    "min_ph":          {"$min": "$ph_value"},
+                    "max_ph":          {"$max": "$ph_value"},
+                }},
+                {"$sort": {"_id": 1}},
+                {"$project": {
+                    "_id": 0,
+                    "bucket": "$_id",
+                    "total_readings": 1,
+                    "temperature":   {"avg": {"$round": ["$avg_temperature", 2]}, "min": {"$round": ["$min_temperature", 2]}, "max": {"$round": ["$max_temperature", 2]}},
+                    "humidity":      {"avg": {"$round": ["$avg_humidity",    2]}, "min": {"$round": ["$min_humidity",    2]}, "max": {"$round": ["$max_humidity",    2]}},
+                    "soil_moisture": {"avg": {"$round": ["$avg_moisture",    2]}, "min": {"$round": ["$min_moisture",    2]}, "max": {"$round": ["$max_moisture",    2]}},
+                    "ph":            {"avg": {"$round": ["$avg_ph",          2]}, "min": {"$round": ["$min_ph",          2]}, "max": {"$round": ["$max_ph",          2]}},
+                }},
+            ]
+            docs = await self._col.aggregate(pipeline).to_list(length=2000)
+            # Serialise the bucket datetime to an ISO string for JSON transport.
+            for d in docs:
+                b = d.get("bucket")
+                if hasattr(b, "isoformat"):
+                    d["bucket"] = b.isoformat()
+            return docs
+        except Exception as e:
+            logger.error(f"[Repository] get_trends failed: {e}")
+            return []
+
 
 # =============================================================
 # RECOMMENDATION REPOSITORY
