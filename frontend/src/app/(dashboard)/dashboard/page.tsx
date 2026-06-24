@@ -32,6 +32,17 @@ import {
   Droplets,
   Sprout,
   FlaskConical,
+  Sun,
+  Cloud,
+  CloudSun,
+  CloudRain,
+  CloudLightning,
+  CloudFog,
+  Radio,
+  BarChart3,
+  ClipboardList,
+  Wheat,
+  Sparkles,
 } from "lucide-react";
 import {
   getLatestReading,
@@ -127,15 +138,15 @@ export default function OverviewPage() {
     high: T.rose,
   };
 
-  const wIcon = (c: string) =>
+  const wIcon = (c: string): React.ReactNode =>
     ({
-      Clear: "☀️",
-      Clouds: "⛅",
-      Rain: "🌧️",
-      Drizzle: "🌦️",
-      Thunderstorm: "⛈️",
-      Mist: "🌫️",
-    }[c] || "🌤️");
+      Clear: <Sun size={32} color={T.amber} strokeWidth={1.5} />,
+      Clouds: <CloudSun size={32} color={T.textSub} strokeWidth={1.5} />,
+      Rain: <CloudRain size={32} color={T.blue} strokeWidth={1.5} />,
+      Drizzle: <CloudSun size={32} color={T.accent} strokeWidth={1.5} />,
+      Thunderstorm: <CloudLightning size={32} color={T.violet} strokeWidth={1.5} />,
+      Mist: <CloudFog size={32} color={T.textMuted} strokeWidth={1.5} />,
+    }[c] || <CloudSun size={32} color={T.accent} strokeWidth={1.5} />);
 
   // Get current time greeting
   const getGreeting = () => {
@@ -369,8 +380,8 @@ export default function OverviewPage() {
             border: `1px solid ${T.border}`,
           }}
         >
-          <div style={{ fontSize: "64px", marginBottom: "16px", opacity: 0.8 }}>
-            📡
+          <div style={{ marginBottom: "16px", opacity: 0.8, display: "flex", justifyContent: "center" }}>
+            <Radio size={64} color={T.accent} strokeWidth={1.5} />
           </div>
           <h3
             style={{
@@ -508,7 +519,7 @@ export default function OverviewPage() {
                   fontSize: "18px",
                 }}
               >
-                📊
+                <BarChart3 size={18} color={T.accent} strokeWidth={2} />
               </div>
               <div>
                 <h3
@@ -756,7 +767,7 @@ export default function OverviewPage() {
                 fontSize: "18px",
               }}
             >
-              ◈
+              <Sparkles size={18} color={T.accent} strokeWidth={2} />
             </div>
             <div>
               <h3
@@ -790,7 +801,7 @@ export default function OverviewPage() {
               style={{ display: "flex", flexDirection: "column", gap: "16px" }}
             >
               {rec.crop && (
-                <AISnip label="Crop Recommendation" color={T.accent} icon="🌾">
+                <AISnip label="Crop Recommendation" color={T.accent} icon={<Wheat size={12} style={{ verticalAlign: "-1px" }} />}>
                   <div
                     style={{
                       fontSize: "18px",
@@ -819,7 +830,7 @@ export default function OverviewPage() {
                 <AISnip
                   label="Irrigation"
                   color={uc[rec.irrigation.urgency] || T.teal}
-                  icon="💧"
+                  icon={<Droplets size={12} style={{ verticalAlign: "-1px" }} />}
                   right={
                     <Badge
                       text={rec.irrigation.urgency}
@@ -865,7 +876,7 @@ export default function OverviewPage() {
                 </AISnip>
               )}
               {rec.fertilizer && (
-                <AISnip label="Fertilizer" color={T.amber} icon="🧪">
+                <AISnip label="Fertilizer" color={T.amber} icon={<FlaskConical size={12} style={{ verticalAlign: "-1px" }} />}>
                   <div
                     style={{
                       fontSize: "14px",
@@ -931,7 +942,7 @@ export default function OverviewPage() {
                 fontSize: "18px",
               }}
             >
-              📋
+              <ClipboardList size={18} color={T.blue} strokeWidth={2} />
             </div>
             <h3 style={{ fontSize: "16px", fontWeight: "600", color: T.text }}>
               Recent Sensor Readings
@@ -1054,12 +1065,11 @@ export default function OverviewPage() {
             >
               <span
                 style={{
-                  fontSize: "40px",
                   display: "block",
                   marginBottom: "12px",
                 }}
               >
-                📡
+                <Radio size={40} color={T.textMuted} strokeWidth={1.5} />
               </span>
               <p style={{ fontSize: "14px" }}>
                 No sensor data yet. Connect your ESP32 to start receiving

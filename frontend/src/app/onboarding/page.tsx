@@ -372,7 +372,6 @@ export default function OnboardingPage() {
 
       if (response.status === 200) {
         toast.success(responseData.message, {
-          icon: '🎉',
           style: {
             borderRadius: '12px',
             background: '#10b981',

@@ -1,4 +1,5 @@
 "use client";
+import { ClipboardList } from "lucide-react";
 import { T } from "./DashboardComponents";
 import type { Lang } from "./LanguageToggle";
 
@@ -27,8 +28,9 @@ export default function AdviceSection({ adviceEn, adviceNp, source, lang }: Prop
         alignItems: "center",
         marginBottom: 10,
       }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "#9a7212" }}>
-          {lang === "en" ? "📋 Detailed Advice" : "📋 विस्तृत सल्लाह"}
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#9a7212", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <ClipboardList size={14} color="#9a7212" strokeWidth={2} />
+          {lang === "en" ? "Detailed Advice" : "विस्तृत सल्लाह"}
         </span>
         <span style={{
           fontSize: 10, padding: "2px 7px", borderRadius: 8,

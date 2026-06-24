@@ -79,7 +79,6 @@ export default function UserProfileUpdatePage({
 
       if (response.status === 200) {
         toast.success(responseData.message, {
-          icon: "🎉",
           style: {
             borderRadius: "10px",
             background: "#10b981",

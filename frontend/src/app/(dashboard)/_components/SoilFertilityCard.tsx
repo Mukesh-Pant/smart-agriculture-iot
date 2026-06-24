@@ -1,4 +1,5 @@
 "use client";
+import { Leaf, Sprout } from "lucide-react";
 import { T, F, ConfRow } from "./DashboardComponents";
 import type { Lang } from "./LanguageToggle";
 import AdviceSection from "./AdviceSection";
@@ -25,8 +26,8 @@ const COLORS: Record<string, string> = {
   Low:  "#dc2626",
 };
 
-const FERTILITY_ICON: Record<string, string> = {
-  High: "🌿", Medium: "🌱", Low: "🍂",
+const FERTILITY_ICON: Record<string, React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>> = {
+  High: Leaf, Medium: Sprout, Low: Leaf,
 };
 
 const ADVICE_NP: Record<string, string> = {
@@ -40,7 +41,7 @@ export default function SoilFertilityCard({
   advice, explanation, lang, adviceEn, adviceNp, adviceSource, embedded,
 }: Props) {
   const color = COLORS[fertility_class] ?? T.teal;
-  const icon  = FERTILITY_ICON[fertility_class] ?? "🌱";
+  const Icon  = FERTILITY_ICON[fertility_class] ?? Sprout;
   const barWidth = (v?: number) => `${Math.round((v ?? 0) * 100)}%`;
 
   const content = (
@@ -165,7 +166,7 @@ export default function SoilFertilityCard({
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 20,
         }}>
-          {icon}
+          <Icon size={20} color={color} strokeWidth={2} />
         </div>
         <div>
           <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 2 }}>

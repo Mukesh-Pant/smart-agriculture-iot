@@ -15,7 +15,7 @@ import {
 } from "../_components/DashboardComponents";
 import { usePolling } from "@/app/hooks/useApi";
 import { getLatestReading, getSensorHistory } from "@/app/services/api";
-import { Thermometer, Droplets, Sprout, FlaskConical } from "lucide-react";
+import { Thermometer, Droplets, Sprout, FlaskConical, Radio, BarChart3, Clock } from "lucide-react";
 
 // Define interfaces for type safety
 interface SensorReading {
@@ -50,10 +50,10 @@ export default function SensorsLivePage() {
   const readings = (hist?.readings || []).slice().reverse();
 
   const SENSORS = [
-    { key: "temperature_c" as const, label: "Temperature", unit: "°C", color: T.rose, icon: "🌡️", lo: 0, hi: 50 },
-    { key: "humidity_pct" as const, label: "Humidity", unit: "%", color: T.blue, icon: "💧", lo: 0, hi: 100 },
-    { key: "soil_moisture_pct" as const, label: "Soil Moisture", unit: "%", color: T.accent, icon: "🌱", lo: 0, hi: 100 },
-    { key: "ph_value" as const, label: "Soil pH", unit: "pH", color: T.amber, icon: "⚗️", lo: 0, hi: 14 },
+    { key: "temperature_c" as const, label: "Temperature", unit: "°C", color: T.rose, icon: Thermometer, lo: 0, hi: 50 },
+    { key: "humidity_pct" as const, label: "Humidity", unit: "%", color: T.blue, icon: Droplets, lo: 0, hi: 100 },
+    { key: "soil_moisture_pct" as const, label: "Soil Moisture", unit: "%", color: T.accent, icon: Sprout, lo: 0, hi: 100 },
+    { key: "ph_value" as const, label: "Soil pH", unit: "pH", color: T.amber, icon: FlaskConical, lo: 0, hi: 14 },
   ];
 
   // Get current time for greeting
@@ -143,7 +143,9 @@ export default function SensorsLivePage() {
           textAlign: "center",
           border: `1px solid ${T.border}`,
         }}>
-          <div style={{ fontSize: "64px", marginBottom: "16px", opacity: 0.8 }}>📡</div>
+          <div style={{ marginBottom: "16px", opacity: 0.8, display: "flex", justifyContent: "center" }}>
+            <Radio size={64} color={T.accent} strokeWidth={1.5} />
+          </div>
           <h3 style={{ fontSize: "20px", fontWeight: "600", color: T.text, marginBottom: "8px" }}>
             No sensor data received yet
           </h3>
@@ -212,7 +214,7 @@ export default function SensorsLivePage() {
                     justifyContent: "center",
                     fontSize: "20px",
                   }}>
-                    {s.icon}
+                    <s.icon size={20} color={s.color} strokeWidth={2} />
                   </div>
                   <div>
                     <div style={{
@@ -346,7 +348,7 @@ export default function SensorsLivePage() {
                       justifyContent: "center",
                       fontSize: "16px",
                     }}>
-                      {s.icon}
+                      <s.icon size={16} color={s.color} strokeWidth={2} />
                     </div>
                     <div>
                       <div style={{
@@ -489,10 +491,20 @@ export default function SensorsLivePage() {
         flexWrap: "wrap",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <span style={{ color: T.accent }}>🟢</span> System Online
+          <span style={{
+            display: "inline-block",
+            width: "8px",
+            height: "8px",
+            borderRadius: "50%",
+            background: T.accent,
+          }} /> System Online
         </div>
-        <div>📊 {hist?.total ?? readings.length} readings in database</div>
-        <div>⏱️ Last update: {parseUTC(sensor?.received_at)?.toLocaleTimeString() ?? '—'}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <BarChart3 size={14} color={T.textMuted} strokeWidth={2} /> {hist?.total ?? readings.length} readings in database
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <Clock size={14} color={T.textMuted} strokeWidth={2} /> Last update: {parseUTC(sensor?.received_at)?.toLocaleTimeString() ?? '—'}
+        </div>
       </div>
 
       {/* Responsive Styles */}
