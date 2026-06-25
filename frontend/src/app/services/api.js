@@ -12,6 +12,9 @@ export const BACKEND_URL = API_BASE_URL;
 
 async function request(path, options = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
+    // Send the httpOnly backend_token cookie so FastAPI can enforce
+    // per-device access (same-origin in production via nginx).
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     ...options,
   });

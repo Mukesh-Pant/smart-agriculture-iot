@@ -11,7 +11,7 @@
 #   GET /api/analytics/devices           → list of known device IDs
 # =============================================================
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -19,6 +19,7 @@ from app.models.sensor_data import DailySummaryResponse
 from app.database.repository import sensor_repository
 from app.database.mongodb import is_connected, get_database
 from app.core.settings import settings
+from app.core.auth import get_current_user, resolve_device_scope, CurrentUser
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
@@ -42,7 +43,8 @@ async def get_daily_summary(
         default=None,
         description="Date in YYYY-MM-DD format. Defaults to today (UTC)."
     ),
-    device_id: Optional[str] = Query(default=None, description="Filter by device ID")
+    device_id: Optional[str] = Query(default=None, description="Filter by device ID"),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Returns min/avg/max for temperature, humidity, soil moisture, and pH
@@ -51,6 +53,8 @@ async def get_daily_summary(
     Example: GET /api/analytics/summary/daily?date=2024-11-15
     """
     _require_db()
+    # Enforce per-device access: farmers only see their assigned device.
+    device_id = resolve_device_scope(user, device_id)
 
     # Parse date or default to today
     if date:
@@ -93,13 +97,15 @@ async def get_readings_in_range(
         description="End datetime in ISO format: 2024-11-15T23:59:59"
     ),
     device_id: Optional[str] = Query(default=None),
-    limit:     int            = Query(default=100, ge=1, le=500)
+    limit:     int            = Query(default=100, ge=1, le=500),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Returns all sensor readings between start and end datetimes.
     Useful for plotting charts on the dashboard for a custom date range.
     """
     _require_db()
+    device_id = resolve_device_scope(user, device_id)
 
     try:
         start_dt = datetime.fromisoformat(start)
@@ -141,13 +147,15 @@ async def get_readings_in_range(
     summary="Get daily summaries for the past 7 days"
 )
 async def get_weekly_summary(
-    device_id: Optional[str] = Query(default=None)
+    device_id: Optional[str] = Query(default=None),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Returns a daily summary for each of the last 7 days.
     Useful for a weekly trend chart on the dashboard.
     """
     _require_db()
+    device_id = resolve_device_scope(user, device_id)
 
     summaries = []
     today = datetime.utcnow()

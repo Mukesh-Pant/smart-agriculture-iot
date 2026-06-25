@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     # rotates models again.
     GEMINI_MODEL:        str   = "gemini-2.5-flash"
 
+    # ── Auth / RBAC (shared with NodeJS backend) ──────────────
+    # Must match NodeJS TOKEN_SECRET_KEY so this service can verify the
+    # backend_token JWT and enforce per-device data access.
+    TOKEN_SECRET_KEY:    str   = ""
+
 
 # Single instance imported everywhere
 settings = Settings()

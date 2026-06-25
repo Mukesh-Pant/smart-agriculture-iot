@@ -148,7 +148,7 @@
 .hero-fade-up {
   opacity: 0;
   transform: translate3d(0, 24px, 0);
-  animation: heroFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: heroFadeUp 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   animation-fill-mode: both;
   will-change: transform, opacity;
   backface-visibility: hidden;

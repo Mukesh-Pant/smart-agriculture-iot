@@ -272,6 +272,8 @@ export async function login(req, res) {
       email: user.email,
       user_role: user.user_role,
       status: user.status,
+      device_id: user.device_id || null,
+      devices: Array.isArray(user.devices) ? user.devices : [],
     };
 
     const token = jwt.sign(tokenData, process.env.TOKEN_SECRET_KEY, {

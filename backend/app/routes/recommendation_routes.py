@@ -16,12 +16,13 @@
 
 import asyncio
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 
 from app.services.ml_service      import ml_service
 from app.services.weather_service import weather_service
 from app.services                 import mqtt_service as mqtt_module
+from app.core.auth import get_current_user, resolve_device_scope, CurrentUser
 from app.models.recommendation import (
     CropRecommendationRequest,
     CropRecommendationResponse,
@@ -121,7 +122,9 @@ def _format_soil(result) -> SoilFertilityResponse:
     response_model=FullRecommendationResponse,
     summary="Run all 3 ML recommendations using live sensor + weather data"
 )
-async def get_full_recommendation():
+async def get_full_recommendation(
+    user: CurrentUser = Depends(get_current_user),
+):
     """
     The primary endpoint for the farmer dashboard.
 
@@ -135,6 +138,9 @@ async def get_full_recommendation():
     connected yet. Add NPK sensor in Phase 5 hardware upgrade.
     """
     _require_ml()
+    # Gate access: a farmer with no assigned device cannot pull live
+    # recommendations (raises 403). Owners/admins always pass.
+    resolve_device_scope(user, None)
 
     warnings     = []
     sensor_dict  = None
@@ -795,23 +801,30 @@ from fastapi import Query as _Query
 
 @router.get("/history", summary="Get recommendation history (per-user or all for admin)")
 async def get_recommendation_history(
-    user_id:  Optional[str] = _Query(None, description="Filter by user_id"),
+    user_id:  Optional[str] = _Query(None, description="Filter by user_id (admins only)"),
     page:     int           = _Query(1, ge=1),
     per_page: int           = _Query(20, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Returns paginated recommendation history from MongoDB.
-    - Regular user: pass their own user_id to see their history.
-    - Admin: omit user_id to see all history.
-    RBAC is enforced at the frontend via JWT role check.
+    - Farmer: always scoped to their own user_id (server-enforced).
+    - Owner/admin: may pass any user_id, or omit it to see all history.
     """
     try:
         from app.database.repository import repository
         skip = (page - 1) * per_page
 
+        # Server-side RBAC: non-privileged users are locked to their own id,
+        # ignoring any user_id they try to pass.
+        if user.is_privileged:
+            effective_user_id = user_id
+        else:
+            effective_user_id = user.id
+
         query: dict = {}
-        if user_id:
-            query["user_id"] = user_id
+        if effective_user_id:
+            query["user_id"] = effective_user_id
 
         records = await repository.get_recommendation_history(
             query=query, skip=skip, limit=per_page
