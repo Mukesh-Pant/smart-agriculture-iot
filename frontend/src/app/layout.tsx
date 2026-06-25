@@ -23,26 +23,48 @@ export const metadata: Metadata = {
     "SmartAgri is an IoT-based Smart Agriculture monitoring and decision-support system — the final-year Major Project of Bachelor of Computer Engineering students at Far Western University (FWU), Mahendranagar, Nepal. It combines ESP32 sensors, MQTT, machine learning (crop, fertilizer, irrigation, soil), and real-time analytics.",
   applicationName: "SmartAgri",
   authors: [
-    { name: "Computer Engineering Students, Far Western University" },
+    { name: "Sapana Pandey" },
+    { name: "Mukesh Pant" },
+    { name: "Adarsh Joshi" },
+    { name: "Sagar Bist" },
   ],
+  creator: "Sapana Pandey, Mukesh Pant, Adarsh Joshi, Sagar Bist — Computer Engineering, Far Western University",
+  publisher: "Department of Computer Engineering, Far Western University",
   generator: "Next.js",
   keywords: [
-    "Smart Agriculture",
+    // Project / name
     "SmartAgri",
+    "Smart Agriculture",
     "Smart Agri project",
     "IoT Smart Agriculture",
     "Smart Agriculture IoT Nepal",
+    // University / programme
     "FWU Computer Engineering Major Project",
     "Far Western University Computer Engineering",
-    "Computer Engineering Major Project",
-    "Major Project Computer Engineering Nepal",
-    "Smart Agriculture by Computer Engineering students",
+    "Far Western University Major Project",
+    "Computer Engineering Major Project Nepal",
     "Bachelor of Computer Engineering project",
+    "Far Western University Mahendranagar",
+    // Authors
+    "Sapana Pandey",
+    "Mukesh Pant",
+    "Adarsh Joshi",
+    "Sagar Bist",
+    "Smart Agriculture by Sapana Pandey Mukesh Pant Adarsh Joshi Sagar Bist",
+    // Supervisors
+    "Er. Birendra Singh Dhami",
+    "Birendra Singh Dhami supervision project",
+    "Er. Kamal Lekhak",
+    "Kamal Lekhak supervision project",
+    "project under Birendra Singh Dhami",
+    "project under Kamal Lekhak",
+    // Department mentors
+    "Er. Toran Prasad Bhatt",
+    "Er. Kishan Datta Bhatta",
+    // Tech
     "ESP32 agriculture monitoring",
     "machine learning crop recommendation",
     "precision agriculture Nepal",
-    "Far Western University Mahendranagar",
-    "BE Computer final year project",
     "agriculture IoT machine learning",
   ],
   category: "technology",
@@ -56,7 +78,7 @@ export const metadata: Metadata = {
     title:
       "SmartAgri — IoT Smart Agriculture | FWU Computer Engineering Major Project",
     description:
-      "Final-year Major Project of Computer Engineering students at Far Western University, Nepal. ESP32 sensors + MQTT + ML for crop, fertilizer, irrigation & soil recommendations with real-time analytics.",
+      "Major Project by Sapana Pandey, Mukesh Pant, Adarsh Joshi & Sagar Bist — Computer Engineering, Far Western University, Nepal. Under the supervision of Er. Birendra Singh Dhami and Er. Kamal Lekhak. ESP32 + MQTT + ML for crop, fertilizer, irrigation & soil recommendations.",
     locale: "en_US",
     images: [
       {
@@ -71,7 +93,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "SmartAgri — IoT Smart Agriculture | FWU Computer Engineering",
     description:
-      "Major Project by Computer Engineering students, Far Western University, Nepal. IoT + ML for precision farming.",
+      "Major Project by Sapana Pandey, Mukesh Pant, Adarsh Joshi & Sagar Bist — Far Western University, Nepal. Supervised by Er. Birendra Singh Dhami & Er. Kamal Lekhak.",
     images: ["/landing/hero.jpg"],
   },
   robots: {
@@ -122,7 +144,35 @@ export default function RootLayout({
                   url: "https://smartagri.cloudcoesis.com",
                   description:
                     "Smart Agriculture platform using ESP32 sensors, MQTT, and machine learning (crop, fertilizer, irrigation, soil fertility) with real-time analytics. Built as a Bachelor of Computer Engineering Major Project.",
-                  author: {
+                  author: [
+                    { "@type": "Person", name: "Sapana Pandey" },
+                    { "@type": "Person", name: "Mukesh Pant" },
+                    { "@type": "Person", name: "Adarsh Joshi" },
+                    { "@type": "Person", name: "Sagar Bist" },
+                  ],
+                  contributor: [
+                    {
+                      "@type": "Person",
+                      name: "Er. Birendra Singh Dhami",
+                      jobTitle: "Project Supervisor",
+                    },
+                    {
+                      "@type": "Person",
+                      name: "Er. Kamal Lekhak",
+                      jobTitle: "Project Supervisor",
+                    },
+                    {
+                      "@type": "Person",
+                      name: "Er. Toran Prasad Bhatt",
+                      jobTitle: "Department of Computer Engineering",
+                    },
+                    {
+                      "@type": "Person",
+                      name: "Er. Kishan Datta Bhatta",
+                      jobTitle: "Department of Computer Engineering",
+                    },
+                  ],
+                  publisher: {
                     "@type": "CollegeOrUniversity",
                     name: "Far Western University",
                     department: "Department of Computer Engineering",
@@ -142,6 +192,18 @@ export default function RootLayout({
                     "Machine Learning",
                     "Precision Agriculture",
                     "Computer Engineering Major Project",
+                  ],
+                  author: [
+                    { "@type": "Person", name: "Sapana Pandey" },
+                    { "@type": "Person", name: "Mukesh Pant" },
+                    { "@type": "Person", name: "Adarsh Joshi" },
+                    { "@type": "Person", name: "Sagar Bist" },
+                  ],
+                  contributor: [
+                    { "@type": "Person", name: "Er. Birendra Singh Dhami" },
+                    { "@type": "Person", name: "Er. Kamal Lekhak" },
+                    { "@type": "Person", name: "Er. Toran Prasad Bhatt" },
+                    { "@type": "Person", name: "Er. Kishan Datta Bhatta" },
                   ],
                   educationalLevel: "Bachelor of Computer Engineering",
                   publisher: {

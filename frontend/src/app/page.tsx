@@ -585,6 +585,14 @@ export default function Home() {
                   platform with a live analytics dashboard and bilingual (English / Nepali) advisory
                   reports.
                 </p>
+                <p className="text-gray-700">
+                  <span className="font-semibold text-gray-900">Developed by:</span>{" "}
+                  Sapana Pandey, Mukesh Pant, Adarsh Joshi and Sagar Bist —
+                  under the supervision of{" "}
+                  <span className="font-semibold text-gray-900">Er. Birendra Singh Dhami</span> and{" "}
+                  <span className="font-semibold text-gray-900">Er. Kamal Lekhak</span>,
+                  Department of Computer Engineering, Far Western University.
+                </p>
               </div>
 
               <div className="mt-6 pt-5 border-t border-gray-100 grid grid-cols-3 gap-4">
