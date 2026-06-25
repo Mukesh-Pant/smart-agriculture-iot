@@ -1,11 +1,12 @@
 import { auth } from "@/lib/auth";
+import { Sprout } from "lucide-react";
 
 export default function Logo() {
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-      {/* Logo with Emoji */}
+      {/* Logo */}
       <div className="relative">
-        <span className="text-2xl">🌱</span>
+        <Sprout size={24} color="#2d6a2d" strokeWidth={2} />
       </div>
 
       {/* Brand Name */}

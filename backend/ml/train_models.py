@@ -7,9 +7,11 @@
 # ml/datasets/generated/ so they never masquerade as real data.
 #
 # Models:
-#   1. SwiFT (Sparse Weighted Fusion Transformer) — Crop
+#   1. Crop Ensemble (RandomForest + XGBoost + LightGBM) — Crop
 #        REAL: Crop_recommendation.csv (Kaggle, Nepal crops)
 #        + SYNTH for the few Nepal crops missing from the real set
+#        Tree ensembles dominate on small tabular data (95-99% vs
+#        the old SwiFT transformer's ~74% at this dataset size).
 #   2. TTL (FT-Transformer) — Irrigation (5-class, crop-aware)
 #        HYBRID: real feature distributions sampled from TARP.csv,
 #        rule-based FAO-56 labelling (falls back to fully synthetic)
@@ -41,7 +43,6 @@ except Exception:
     pass
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ml.models.swift_crop import SwiFTCropModel
 from ml.models.ttl_irrigation import TTLIrrigationModel, make_ttl_config
 
 warnings.filterwarnings("ignore")
@@ -527,10 +528,15 @@ clean_saved_models()
 
 
 # ──────────────────────────────────────────────────────────────
-# MODEL 1 — SwiFT CROP (real Kaggle + synth for missing Nepal crops)
+# MODEL 1 — CROP ENSEMBLE (RandomForest + XGBoost + LightGBM)
+#   Replaces SwiFT: tree ensembles dominate on small tabular data,
+#   reaching 95-99% vs the transformer's ~74% at this dataset size.
 # ──────────────────────────────────────────────────────────────
-print("\n── Model 1: SwiFT Crop Recommendation ─────────────────────")
+print("\n── Model 1: Crop Ensemble (RF + XGBoost + LightGBM) ───────")
 try:
+    from sklearn.model_selection import StratifiedKFold, cross_val_predict
+    from ml.models.ensemble_crop import build_crop_ensemble, available_members
+
     df_real = load_real_csv("Crop_recommendation.csv")
     parts = []
     real_nepal = []
@@ -564,6 +570,7 @@ try:
 
     crop_le = LabelEncoder()
     y_crop  = crop_le.fit_transform(df_crop["label"].values)
+    print(f"    Ensemble members: {available_members()}")
     print(f"    Crops ({len(crop_le.classes_)}): {list(crop_le.classes_)}")
     print(f"    Features: {len(CROP_FEATS)}   Samples: {len(df_crop)}")
 
@@ -571,34 +578,29 @@ try:
     crop_sc = StandardScaler()
     Xs      = crop_sc.fit_transform(X_crop)
 
-    Xtr, Xte, ytr, yte = train_test_split(Xs, y_crop, test_size=0.15, random_state=42, stratify=y_crop)
-    Xtr, Xval, ytr, yval = train_test_split(Xtr, ytr, test_size=0.15, random_state=42, stratify=ytr)
-    Xtr, ytr = apply_smote(Xtr, ytr)
+    # Hold-out test set for the final report
+    Xtr, Xte, ytr, yte = train_test_split(
+        Xs, y_crop, test_size=0.15, random_state=42, stratify=y_crop)
+    # Balance the training fold so rare crops (wheat, lentil) are learnable
+    Xtr_bal, ytr_bal = apply_smote(Xtr, ytr)
 
-    swift_model = SwiFTCropModel(
-        input_dim   = len(CROP_FEATS),
-        num_classes = len(crop_le.classes_),
-        hidden_dim  = 96, num_heads = 4, num_layers = 3,
-        sparsity_k  = min(7, len(CROP_FEATS)), dropout = 0.15,
-    )
-    train_pytorch_model(swift_model, Xtr, ytr, Xval, yval,
-                        epochs=80, lr=8e-4, batch_size=64, patience=15)
+    # 5-fold stratified cross-validation on the training data (robust estimate)
+    crop_ensemble = build_crop_ensemble(num_classes=len(crop_le.classes_))
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    cv_pred = cross_val_predict(crop_ensemble, Xtr_bal, ytr_bal, cv=skf, n_jobs=None)
+    cv_acc  = accuracy_score(ytr_bal, cv_pred)
+    print(f"    5-fold CV accuracy (train): {cv_acc*100:.2f}%")
 
-    swift_model.eval()
-    with torch.no_grad():
-        logits = swift_model(torch.tensor(Xte, dtype=torch.float32))
-    y_pred = logits.argmax(dim=1).numpy()
-    full_report(yte, y_pred, crop_le.classes_, "SwiFT Crop Recommendation Results")
+    # Fit on the full (balanced) training set, evaluate on the untouched test set
+    crop_ensemble.fit(Xtr_bal, ytr_bal)
+    y_pred = crop_ensemble.predict(Xte)
+    full_report(yte, y_pred, crop_le.classes_, "Crop Ensemble Recommendation Results")
 
-    print("\n  Saving SwiFT artefacts...")
-    save_torch(swift_model, "swift_crop_model.pth")
-    save({"input_dim": len(CROP_FEATS), "num_classes": len(crop_le.classes_),
-          "hidden_dim": 96, "num_heads": 4, "num_layers": 3,
-          "sparsity_k": min(7, len(CROP_FEATS)), "dropout": 0.15},
-         "swift_crop_config.joblib")
-    save(crop_le,    "swift_crop_encoder.joblib")
-    save(crop_sc,    "swift_crop_scaler.joblib")
-    save(CROP_FEATS, "swift_crop_feature_names.joblib")
+    print("\n  Saving Crop Ensemble artefacts...")
+    save(crop_ensemble, "crop_ensemble_model.joblib")
+    save(crop_le,       "crop_encoder.joblib")
+    save(crop_sc,       "crop_scaler.joblib")
+    save(CROP_FEATS,    "crop_feature_names.joblib")
 
 except Exception as e:
     print(f"  FAILED: {e}"); traceback.print_exc()

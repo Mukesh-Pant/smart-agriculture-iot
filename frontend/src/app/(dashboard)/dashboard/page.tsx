@@ -25,13 +25,30 @@ import {
   fmt,
   ago,
   hhmm,
+  parseUTC,
 } from "../_components/DashboardComponents";
+
+// A reading is considered "live" if it arrived within this window.
+// ESP32 publishes every 10s (SENSOR_READ_INTERVAL), so 30s tolerates
+// a couple of missed packets before flagging the system offline.
+const LIVE_WINDOW_MS = 30_000;
 import { usePolling } from "@/app/hooks/useApi";
 import {
   Thermometer,
   Droplets,
   Sprout,
   FlaskConical,
+  Sun,
+  Cloud,
+  CloudSun,
+  CloudRain,
+  CloudLightning,
+  CloudFog,
+  Radio,
+  BarChart3,
+  ClipboardList,
+  Wheat,
+  Sparkles,
 } from "lucide-react";
 import {
   getLatestReading,
@@ -127,15 +144,15 @@ export default function OverviewPage() {
     high: T.rose,
   };
 
-  const wIcon = (c: string) =>
+  const wIcon = (c: string): React.ReactNode =>
     ({
-      Clear: "☀️",
-      Clouds: "⛅",
-      Rain: "🌧️",
-      Drizzle: "🌦️",
-      Thunderstorm: "⛈️",
-      Mist: "🌫️",
-    }[c] || "🌤️");
+      Clear: <Sun size={32} color={T.amber} strokeWidth={1.5} />,
+      Clouds: <CloudSun size={32} color={T.textSub} strokeWidth={1.5} />,
+      Rain: <CloudRain size={32} color={T.blue} strokeWidth={1.5} />,
+      Drizzle: <CloudSun size={32} color={T.accent} strokeWidth={1.5} />,
+      Thunderstorm: <CloudLightning size={32} color={T.violet} strokeWidth={1.5} />,
+      Mist: <CloudFog size={32} color={T.textMuted} strokeWidth={1.5} />,
+    }[c] || <CloudSun size={32} color={T.accent} strokeWidth={1.5} />);
 
   // Get current time greeting
   const getGreeting = () => {
@@ -151,6 +168,12 @@ export default function OverviewPage() {
     0;
   const avgHumidity =
     series.reduce((acc, curr) => acc + (curr.hum || 0), 0) / series.length || 0;
+
+  // System is "live" only if the most recent reading is fresh (not just present).
+  const lastReadingAt = parseUTC(sensor?.received_at);
+  const isLive = lastReadingAt
+    ? Date.now() - lastReadingAt.getTime() < LIVE_WINDOW_MS
+    : false;
 
   return (
     <div style={{ backgroundColor: T.bg, minHeight: "100vh", padding: "24px" }}>
@@ -348,10 +371,10 @@ export default function OverviewPage() {
               style={{
                 fontSize: "24px",
                 fontWeight: "600",
-                color: sensor ? T.accent : T.rose,
+                color: isLive ? T.accent : T.rose,
               }}
             >
-              {sensor ? "Active" : "Waiting"}
+              {isLive ? "Active" : "Offline"}
             </div>
           </div>
         </div>
@@ -369,8 +392,8 @@ export default function OverviewPage() {
             border: `1px solid ${T.border}`,
           }}
         >
-          <div style={{ fontSize: "64px", marginBottom: "16px", opacity: 0.8 }}>
-            📡
+          <div style={{ marginBottom: "16px", opacity: 0.8, display: "flex", justifyContent: "center" }}>
+            <Radio size={64} color={T.accent} strokeWidth={1.5} />
           </div>
           <h3
             style={{
@@ -508,7 +531,7 @@ export default function OverviewPage() {
                   fontSize: "18px",
                 }}
               >
-                📊
+                <BarChart3 size={18} color={T.accent} strokeWidth={2} />
               </div>
               <div>
                 <h3
@@ -756,7 +779,7 @@ export default function OverviewPage() {
                 fontSize: "18px",
               }}
             >
-              ◈
+              <Sparkles size={18} color={T.accent} strokeWidth={2} />
             </div>
             <div>
               <h3
@@ -790,7 +813,7 @@ export default function OverviewPage() {
               style={{ display: "flex", flexDirection: "column", gap: "16px" }}
             >
               {rec.crop && (
-                <AISnip label="Crop Recommendation" color={T.accent} icon="🌾">
+                <AISnip label="Crop Recommendation" color={T.accent} icon={<Wheat size={12} style={{ verticalAlign: "-1px" }} />}>
                   <div
                     style={{
                       fontSize: "18px",
@@ -819,7 +842,7 @@ export default function OverviewPage() {
                 <AISnip
                   label="Irrigation"
                   color={uc[rec.irrigation.urgency] || T.teal}
-                  icon="💧"
+                  icon={<Droplets size={12} style={{ verticalAlign: "-1px" }} />}
                   right={
                     <Badge
                       text={rec.irrigation.urgency}
@@ -865,7 +888,7 @@ export default function OverviewPage() {
                 </AISnip>
               )}
               {rec.fertilizer && (
-                <AISnip label="Fertilizer" color={T.amber} icon="🧪">
+                <AISnip label="Fertilizer" color={T.amber} icon={<FlaskConical size={12} style={{ verticalAlign: "-1px" }} />}>
                   <div
                     style={{
                       fontSize: "14px",
@@ -931,7 +954,7 @@ export default function OverviewPage() {
                 fontSize: "18px",
               }}
             >
-              📋
+              <ClipboardList size={18} color={T.blue} strokeWidth={2} />
             </div>
             <h3 style={{ fontSize: "16px", fontWeight: "600", color: T.text }}>
               Recent Sensor Readings
@@ -1054,12 +1077,11 @@ export default function OverviewPage() {
             >
               <span
                 style={{
-                  fontSize: "40px",
                   display: "block",
                   marginBottom: "12px",
                 }}
               >
-                📡
+                <Radio size={40} color={T.textMuted} strokeWidth={1.5} />
               </span>
               <p style={{ fontSize: "14px" }}>
                 No sensor data yet. Connect your ESP32 to start receiving

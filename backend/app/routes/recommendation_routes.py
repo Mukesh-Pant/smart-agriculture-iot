@@ -83,6 +83,8 @@ def _format_fertilizer(result) -> FertilizerRecommendationResponse:
         npk_status   = result.npk_status,
         input_used   = result.input_features,
         weather_used = True,
+        crop_aware   = result.crop_aware,
+        crop_used    = result.crop_used,
     )
 
 
@@ -96,6 +98,8 @@ def _format_irrigation(result) -> IrrigationRecommendationResponse:
         urgency         = result.urgency,
         input_used      = result.input_features,
         weather_used    = result.input_features.get("rainfall_mm", 0) > 0,
+        crop_aware      = result.crop_aware,
+        crop_used       = result.crop_used,
     )
 
 
@@ -201,16 +205,17 @@ async def get_full_recommendation(
         rainfall    = rainfall_mm,
     )
 
-    # Fertilizer recommendation — uses sensor moisture + weather
+    # Fertilizer recommendation — general (sensor-based), no confirmed crop
     fert_result = ml_service.predict_fertilizer(
         temperature = weather_temp,
         humidity    = weather_humidity,
         moisture    = soil_moisture_pct,
         soil_type   = "Loamy",      # default — user can override via POST endpoint
-        crop_type   = "Wheat",      # default — user can override via POST endpoint
+        crop_type   = "General",
         nitrogen    = nitrogen,
         potassium   = potassium,
         phosphorus  = phosphorus,
+        crop_aware  = False,
     )
 
     # Soil fertility — uses same NPK + sensor data
@@ -339,7 +344,9 @@ async def recommend_fertilizer(request: FertilizerRecommendationRequest):
     phosphorus = request.phosphorus if request.phosphorus is not None else 40.0
     potassium  = request.potassium  if request.potassium  is not None else 40.0
     soil_type  = request.soil_type or "Loamy"
-    crop_type  = request.crop_type or "Wheat"
+    crop_type  = request.crop_type or "General"
+    # Crop-aware when the frontend flags it OR sends a real (non-General) crop.
+    crop_aware = bool(request.crop_aware) or (crop_type.lower() != "general")
 
     result = ml_service.predict_fertilizer(
         temperature = temperature,
@@ -350,6 +357,7 @@ async def recommend_fertilizer(request: FertilizerRecommendationRequest):
         nitrogen    = nitrogen,
         potassium   = potassium,
         phosphorus  = phosphorus,
+        crop_aware  = crop_aware,
     )
 
     if result is None:
@@ -411,14 +419,14 @@ async def get_ml_status():
     """Returns which ML models are loaded and ready for inference."""
     return {
         "ml_ready":           ml_service.is_ready(),
-        "swift_crop_model":   ml_service._swift_model  is not None,
-        "ttl_irrigation":     ml_service._ttl_model    is not None,
-        "tabnet_soil":        ml_service._soil_model   is not None,
-        "tabnet_fertilizer":  ml_service._fert_model   is not None,
-        "phase":              "Phase 8 — Advanced DL Models (SwiFT + TTL + TabNet×2)",
+        "crop_ensemble":      ml_service._crop_ensemble is not None,
+        "ttl_irrigation":     ml_service._ttl_model     is not None,
+        "tabnet_soil":        ml_service._soil_model    is not None,
+        "tabnet_fertilizer":  ml_service._fert_model    is not None,
+        "phase":              "Crop Ensemble (RF+XGBoost+LightGBM) + TTL + TabNet×2",
         "weather_configured": weather_service.is_configured(),
         "message": (
-            "All 4 Phase 8 models ready." if ml_service.is_ready()
+            "All 4 models ready." if ml_service.is_ready()
             else "Run: python ml/train_models.py — then restart."
         )
     }
@@ -515,6 +523,7 @@ async def generate_complete_report(request: CompleteReportRequest):
         nitrogen    = nitrogen,
         potassium   = potassium,
         phosphorus  = phosphorus,
+        crop_aware  = True,
     )
 
     irrig_result = ml_service.predict_irrigation(

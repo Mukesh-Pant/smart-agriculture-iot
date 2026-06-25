@@ -67,8 +67,9 @@ class FertilizerRecommendationRequest(BaseModel):
     nitrogen:    Optional[float] = Field(None, ge=0, le=200)
     phosphorus:  Optional[float] = Field(None, ge=0, le=200)
     potassium:   Optional[float] = Field(None, ge=0, le=200)
-    soil_type:   Optional[str]   = Field("Loamy", description="Sandy | Loamy | Black | Red | Clayey")
-    crop_type:   Optional[str]   = Field("Wheat", description="e.g. Wheat, Rice, Maize, Cotton")
+    soil_type:   Optional[str]   = Field("Loamy", description="Sandy | Loamy | Clay | Silt | Alluvial")
+    crop_type:   Optional[str]   = Field("General", description="Confirmed crop for crop-aware mode, else 'General'")
+    crop_aware:  bool            = Field(False, description="True when a confirmed crop personalises the recommendation")
 
     # Auto-filled from live sensors if omitted
     temperature: Optional[float] = Field(None, ge=-10, le=60)
@@ -127,6 +128,8 @@ class FertilizerRecommendationResponse(BaseModel):
     npk_status:       dict
     input_used:       dict
     weather_used:     bool = False
+    crop_aware:       bool = False
+    crop_used:        Optional[str] = None
 
 
 class IrrigationRecommendationResponse(BaseModel):
@@ -138,6 +141,8 @@ class IrrigationRecommendationResponse(BaseModel):
     urgency:         str
     input_used:      dict
     weather_used:    bool = False
+    crop_aware:      bool = False
+    crop_used:       Optional[str] = None
 
 
 # ── Soil Fertility Models ─────────────────────────────────────

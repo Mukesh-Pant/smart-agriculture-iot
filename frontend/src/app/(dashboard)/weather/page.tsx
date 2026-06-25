@@ -1,6 +1,23 @@
 "use client";
 import { useCallback } from "react";
 import {
+  Sun,
+  Cloud,
+  CloudRain,
+  CloudSun,
+  CloudLightning,
+  CloudFog,
+  MapPin,
+  Droplets,
+  Wind,
+  Gauge,
+  CalendarDays,
+  Clock,
+  Leaf,
+  Thermometer,
+  Bug,
+} from "lucide-react";
+import {
   T,
   F,
   Card,
@@ -39,17 +56,19 @@ export default function WeatherPage() {
     300000
   ) as { data: WeatherData | null; loading: boolean; error: any };
 
-  const wIcon = (c: string): string =>
-    ({
-      Clear: "☀️",
-      Clouds: "☁️",
-      Rain: "🌧️",
-      Drizzle: "🌦️",
-      Thunderstorm: "⛈️",
-      Mist: "🌫️",
-      Haze: "🌫️",
-      Fog: "🌁",
-    }[c] || "🌤️");
+  const wIcon = (c: string) => {
+    const map: Record<string, React.ReactNode> = {
+      Clear: <Sun size={72} color={T.amber} strokeWidth={1.5} />,
+      Clouds: <Cloud size={72} color={T.textSub} strokeWidth={1.5} />,
+      Rain: <CloudRain size={72} color={T.blue} strokeWidth={1.5} />,
+      Drizzle: <CloudSun size={72} color={T.accent} strokeWidth={1.5} />,
+      Thunderstorm: <CloudLightning size={72} color={T.violet} strokeWidth={1.5} />,
+      Mist: <CloudFog size={72} color={T.textMuted} strokeWidth={1.5} />,
+      Haze: <CloudFog size={72} color={T.textMuted} strokeWidth={1.5} />,
+      Fog: <CloudFog size={72} color={T.textMuted} strokeWidth={1.5} />,
+    };
+    return map[c] || <CloudSun size={72} color={T.accent} strokeWidth={1.5} />;
+  };
 
   // Get current time greeting
   const getGreeting = (): string => {
@@ -123,7 +142,7 @@ export default function WeatherPage() {
               border: `1px solid ${T.border}`,
               flexWrap: "wrap",
             }}>
-              <span style={{ fontSize: "16px" }}>📍</span>
+              <MapPin size={16} color={T.blue} strokeWidth={2} />
               <span style={{ fontSize: "clamp(12px, 2vw, 14px)", fontWeight: "500", color: T.text }}>
                 {w.city}, {w.country}
               </span>
@@ -246,21 +265,21 @@ export default function WeatherPage() {
               flexWrap: "wrap",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "120px" }}>
-                <span style={{ fontSize: "20px" }}>💧</span>
+                <Droplets size={20} color={T.blue} strokeWidth={2} />
                 <div>
                   <div style={{ fontSize: "11px", color: T.textMuted }}>Humidity</div>
                   <div style={{ fontSize: "16px", fontWeight: "600", color: T.blue }}>{w.humidity_pct}%</div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "120px" }}>
-                <span style={{ fontSize: "20px" }}>💨</span>
+                <Wind size={20} color={T.accent} strokeWidth={2} />
                 <div>
                   <div style={{ fontSize: "11px", color: T.textMuted }}>Wind</div>
                   <div style={{ fontSize: "16px", fontWeight: "600", color: T.accent }}>{fmt(w.wind_speed_ms)} m/s</div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "120px" }}>
-                <span style={{ fontSize: "20px" }}>🔵</span>
+                <Gauge size={20} color={T.textSub} strokeWidth={2} />
                 <div>
                   <div style={{ fontSize: "11px", color: T.textMuted }}>Pressure</div>
                   <div style={{ fontSize: "16px", fontWeight: "600", color: T.textSub }}>{w.pressure_hpa} hPa</div>
@@ -291,7 +310,7 @@ export default function WeatherPage() {
               decimals={0} 
               unit="%" 
               color={T.blue} 
-              icon="💧"
+              icon={<Droplets size={16} color={T.blue} />}
               sub="Relative humidity"
             />
             <Metric 
@@ -300,7 +319,7 @@ export default function WeatherPage() {
               decimals={1} 
               unit="m/s" 
               color={T.accent} 
-              icon="💨"
+              icon={<Wind size={16} color={T.accent} />}
               sub={`Direction: ${w.wind_direction || 'N/A'}`}
             />
             <Metric 
@@ -309,7 +328,7 @@ export default function WeatherPage() {
               decimals={0} 
               unit="hPa" 
               color={T.textSub} 
-              icon="🔵"
+              icon={<Gauge size={16} color={T.textSub} />}
               sub="Atmospheric"
             />
             <Metric 
@@ -318,7 +337,7 @@ export default function WeatherPage() {
               decimals={0} 
               unit="%" 
               color={T.textSub} 
-              icon="☁️"
+              icon={<Cloud size={16} color={T.textSub} />}
               sub="Sky coverage"
             />
             <Metric 
@@ -327,7 +346,7 @@ export default function WeatherPage() {
               decimals={1} 
               unit="mm" 
               color={T.teal} 
-              icon="🌧️"
+              icon={<CloudRain size={16} color={T.teal} />}
               sub={w.rainfall_1h_mm > 0 ? "Recent precipitation" : "No recent rain"}
             />
             <Metric 
@@ -336,7 +355,7 @@ export default function WeatherPage() {
               decimals={0} 
               unit="mm" 
               color={T.rose} 
-              icon="📅"
+              icon={<CalendarDays size={16} color={T.rose} />}
               sub="Projected total"
             />
           </div>
@@ -359,7 +378,7 @@ export default function WeatherPage() {
                 fontSize: "20px",
                 flexShrink: 0,
               }}>
-                🌿
+                <Leaf size={20} color={T.accent} strokeWidth={2} />
               </div>
               <div>
                 <h3 style={{ fontSize: "16px", fontWeight: "600", color: T.text, marginBottom: "2px" }}>
@@ -382,7 +401,7 @@ export default function WeatherPage() {
                       ? "Moderate — high humidity"
                       : "High — dry conditions",
                   color: w.rainfall_3h_mm > 5 ? T.accent : w.humidity_pct > 80 ? T.amber : T.rose,
-                  icon: "💧",
+                  icon: Droplets,
                 },
                 {
                   label: "Crop Stress Risk",
@@ -393,13 +412,13 @@ export default function WeatherPage() {
                       ? "Cold stress — protect from frost"
                       : "Optimal temperature range",
                   color: w.temperature_c > 35 || w.temperature_c < 10 ? T.rose : T.accent,
-                  icon: "🌡️",
+                  icon: Thermometer,
                 },
                 {
                   label: "Disease Risk",
                   value: w.humidity_pct > 85 ? "Elevated — fungal disease risk" : "Low — routine monitoring",
                   color: w.humidity_pct > 85 ? T.amber : T.accent,
-                  icon: "🦠",
+                  icon: Bug,
                 },
               ].map((item, i) => (
                 <div
@@ -435,7 +454,7 @@ export default function WeatherPage() {
                     fontSize: "18px",
                     flexShrink: 0,
                   }}>
-                    {item.icon}
+                    <item.icon size={18} color={item.color} strokeWidth={2} />
                   </div>
                   <div style={{ flex: "1 1 200px" }}>
                     <div style={{ fontSize: "13px", color: T.textSub, marginBottom: "4px" }}>
@@ -468,7 +487,7 @@ export default function WeatherPage() {
               gap: "8px",
               flexWrap: "wrap",
             }}>
-              <span style={{ fontSize: "16px" }}>⏱️</span>
+              <Clock size={16} color={T.blue} strokeWidth={2} />
               <span>
                 Last updated: {new Date().toLocaleTimeString()} · Next update in 5 minutes
               </span>
@@ -483,7 +502,9 @@ export default function WeatherPage() {
           borderRadius: "24px",
           textAlign: "center",
         }}>
-          <div style={{ fontSize: "clamp(60px, 10vw, 80px)", marginBottom: "24px", opacity: 0.8 }}>🌦️</div>
+          <div style={{ marginBottom: "24px", opacity: 0.8, display: "flex", justifyContent: "center" }}>
+            <CloudSun size={72} color={T.accent} strokeWidth={1.5} />
+          </div>
           <h2 style={{ 
             fontSize: "clamp(20px, 3vw, 24px)", 
             fontWeight: "600", 

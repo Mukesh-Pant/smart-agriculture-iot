@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { AlertTriangle } from "lucide-react";
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -379,7 +380,7 @@ export function Err({ msg }: any) {
         gap: 8,
       }}
     >
-      <span style={{ fontSize: 16 }}>⚠️</span>
+      <AlertTriangle size={16} style={{ flexShrink: 0 }} />
       {msg}
     </div>
   ) : null;

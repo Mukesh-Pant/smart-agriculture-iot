@@ -15,7 +15,7 @@ import {
 } from "../_components/DashboardComponents";
 import { usePolling } from "@/app/hooks/useApi";
 import { getLatestReading, getSensorHistory } from "@/app/services/api";
-import { Thermometer, Droplets, Sprout, FlaskConical } from "lucide-react";
+import { Thermometer, Droplets, Sprout, FlaskConical, Radio, BarChart3, Clock } from "lucide-react";
 
 // Define interfaces for type safety
 interface SensorReading {
@@ -49,11 +49,19 @@ export default function SensorsLivePage() {
 
   const readings = (hist?.readings || []).slice().reverse();
 
+  // System is "live" only when the latest reading is fresh, not merely present.
+  // ESP32 publishes every 10s; 30s tolerates a couple of missed packets.
+  const LIVE_WINDOW_MS = 30_000;
+  const lastReadingAt = parseUTC(sensor?.received_at);
+  const isLive = lastReadingAt
+    ? Date.now() - lastReadingAt.getTime() < LIVE_WINDOW_MS
+    : false;
+
   const SENSORS = [
-    { key: "temperature_c" as const, label: "Temperature", unit: "°C", color: T.rose, icon: <Thermometer size={18} />, lo: 0, hi: 50 },
-    { key: "humidity_pct" as const, label: "Humidity", unit: "%", color: T.blue, icon: <Droplets size={18} />, lo: 0, hi: 100 },
-    { key: "soil_moisture_pct" as const, label: "Soil Moisture", unit: "%", color: T.accent, icon: <Sprout size={18} />, lo: 0, hi: 100 },
-    { key: "ph_value" as const, label: "Soil pH", unit: "pH", color: T.amber, icon: <FlaskConical size={18} />, lo: 0, hi: 14 },
+    { key: "temperature_c" as const, label: "Temperature", unit: "°C", color: T.rose, icon: Thermometer, lo: 0, hi: 50 },
+    { key: "humidity_pct" as const, label: "Humidity", unit: "%", color: T.blue, icon: Droplets, lo: 0, hi: 100 },
+    { key: "soil_moisture_pct" as const, label: "Soil Moisture", unit: "%", color: T.accent, icon: Sprout, lo: 0, hi: 100 },
+    { key: "ph_value" as const, label: "Soil pH", unit: "pH", color: T.amber, icon: FlaskConical, lo: 0, hi: 14 },
   ];
 
   // Get current time for greeting
@@ -117,8 +125,8 @@ export default function SensorsLivePage() {
             boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.05)",
           }}>
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "20px", fontWeight: "600", color: T.accent }}>
-                {hist?.readings && (hist.readings as SensorReading[]).length > 0 ? "Active" : "Waiting"}
+              <div style={{ fontSize: "20px", fontWeight: "600", color: isLive ? T.accent : T.rose }}>
+                {isLive ? "Active" : "Offline"}
               </div>
               <div style={{ fontSize: "11px", color: T.textMuted }}>Status</div>
             </div>
@@ -143,7 +151,9 @@ export default function SensorsLivePage() {
           textAlign: "center",
           border: `1px solid ${T.border}`,
         }}>
-          <div style={{ fontSize: "64px", marginBottom: "16px", opacity: 0.8 }}>📡</div>
+          <div style={{ marginBottom: "16px", opacity: 0.8, display: "flex", justifyContent: "center" }}>
+            <Radio size={64} color={T.accent} strokeWidth={1.5} />
+          </div>
           <h3 style={{ fontSize: "20px", fontWeight: "600", color: T.text, marginBottom: "8px" }}>
             No sensor data received yet
           </h3>
@@ -212,7 +222,7 @@ export default function SensorsLivePage() {
                     justifyContent: "center",
                     fontSize: "20px",
                   }}>
-                    {s.icon}
+                    <s.icon size={20} color={s.color} strokeWidth={2} />
                   </div>
                   <div>
                     <div style={{
@@ -346,7 +356,7 @@ export default function SensorsLivePage() {
                       justifyContent: "center",
                       fontSize: "16px",
                     }}>
-                      {s.icon}
+                      <s.icon size={16} color={s.color} strokeWidth={2} />
                     </div>
                     <div>
                       <div style={{
@@ -488,11 +498,21 @@ export default function SensorsLivePage() {
         color: T.textMuted,
         flexWrap: "wrap",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.accent, display: "inline-block" }} /> System Online
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <span style={{
+            display: "inline-block",
+            width: "8px",
+            height: "8px",
+            borderRadius: "50%",
+            background: isLive ? T.accent : T.rose,
+          }} /> {isLive ? "System Online" : "System Offline"}
         </div>
-        <div>{hist?.total ?? readings.length} readings in database</div>
-        <div>Last update: {parseUTC(sensor?.received_at)?.toLocaleTimeString() ?? '—'}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <BarChart3 size={14} color={T.textMuted} strokeWidth={2} /> {hist?.total ?? readings.length} readings in database
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <Clock size={14} color={T.textMuted} strokeWidth={2} /> Last update: {parseUTC(sensor?.received_at)?.toLocaleTimeString() ?? '—'}
+        </div>
       </div>
 
       {/* Responsive Styles */}

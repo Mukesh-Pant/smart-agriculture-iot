@@ -1,11 +1,11 @@
 # =============================================================
-# app/services/ml_service.py — Phase 8 ML Inference Engine
+# app/services/ml_service.py — ML Inference Engine
 #
-# Loads and serves 4 advanced deep learning models:
-#   1. SwiFT (PyTorch)      — Crop Recommendation
+# Loads and serves 4 models:
+#   1. Crop Ensemble (RF + XGBoost + LightGBM) — Crop Recommendation
 #   2. TTL (PyTorch)        — Irrigation Advice (5-class, crop-aware)
 #   3. TabNet (pytorch-tabnet) — Soil Fertility (Low/Medium/High)
-#   4. TabNet (pytorch-tabnet) — Fertilizer Recommendation
+#   4. TabNet (pytorch-tabnet) — Fertilizer Recommendation (crop-aware)
 #
 # XAI: LIME explanations for TabNet models (soil + fertilizer)
 # =============================================================
@@ -51,6 +51,8 @@ class FertilizerRecommendation:
     npk_status:     dict = field(default_factory=dict)
     input_features: dict = field(default_factory=dict)
     explanation:    Optional[dict] = None
+    crop_aware:     bool = False
+    crop_used:      Optional[str] = None
 
 
 @dataclass
@@ -61,6 +63,7 @@ class IrrigationRecommendation:
     water_amount_mm: Optional[float]
     urgency:         str
     crop_aware:      bool = False
+    crop_used:       Optional[str] = None
     input_features:  dict = field(default_factory=dict)
 
 
@@ -133,6 +136,58 @@ _STAGE_MOD = {
     "initial":0.80, "development":1.00, "mid_season":1.15, "late_season":0.85
 }
 
+# Maps the crop-recommendation model's 18 lowercase crop labels onto the
+# coarser category labels the fertilizer / irrigation encoders were trained
+# on. Each value is an ordered candidate list — the first label that exists
+# in a given encoder's classes (case-insensitive) is used. This makes the
+# crop-aware fertilizer + irrigation recommendations actually respond to the
+# confirmed crop instead of silently falling back to index 0.
+_CROP_ALIASES = {
+    "rice":        ["Rice"],
+    "wheat":       ["Wheat"],
+    "maize":       ["Maize"],
+    "potato":      ["Potato"],
+    "mustard":     ["Mustard"],
+    "soybean":     ["Soybean"],
+    "jute":        ["Vegetables"],
+    "lentil":      ["Lentil", "Pulses"],
+    "chickpea":    ["Chickpea", "Pulses"],
+    "blackgram":   ["Pulses"],
+    "mungbean":    ["Pulses"],
+    "pigeonpeas":  ["Pulses"],
+    "kidneybeans": ["Pulses"],
+    "banana":      ["Fruits"],
+    "watermelon":  ["Fruits", "Vegetables"],
+    "mango":       ["Fruits"],
+    "apple":       ["Fruits"],
+    "orange":      ["Fruits"],
+}
+
+
+def _normalise_crop(crop_type, encoder):
+    """
+    Resolve a (possibly lowercase / out-of-vocabulary) crop name to a label
+    the given LabelEncoder actually knows.
+
+    Returns (matched_label, encoded_index) or (None, None) if no match —
+    the caller then falls back to index 0.
+    """
+    if not crop_type or encoder is None:
+        return None, None
+    classes = list(getattr(encoder, "classes_", []))
+    lower_map = {str(c).lower(): c for c in classes}
+
+    candidates = [crop_type] + _CROP_ALIASES.get(str(crop_type).lower(), [])
+    for cand in candidates:
+        match = lower_map.get(str(cand).lower())
+        if match is not None:
+            try:
+                idx = int(encoder.transform([match])[0])
+                return match, idx
+            except (ValueError, AttributeError):
+                continue
+    return None, None
+
 
 # ── ML Service ────────────────────────────────────────────────
 
@@ -143,11 +198,11 @@ class MLService:
     """
 
     def __init__(self):
-        # SwiFT Crop (PyTorch)
-        self._swift_model   = None
-        self._swift_encoder = None
-        self._swift_scaler  = None
-        self._swift_feats   = None
+        # Crop Ensemble (RF + XGBoost + LightGBM, scikit-learn)
+        self._crop_ensemble = None
+        self._crop_encoder  = None
+        self._crop_scaler   = None
+        self._crop_feats    = None
 
         # TTL Irrigation (PyTorch)
         self._ttl_model     = None
@@ -199,15 +254,13 @@ class MLService:
         return model
 
     def load_all_models(self):
-        """Load all 4 Phase 8 models at FastAPI startup."""
-        logger.info("[ML] Loading Phase 8 advanced models...")
+        """Load all 4 models at FastAPI startup."""
+        logger.info("[ML] Loading advanced models...")
 
         try:
-            from models.swift_crop     import SwiFTCropModel
             from models.ttl_irrigation import TTLIrrigationModel
         except ImportError:
             try:
-                from ml.models.swift_crop     import SwiFTCropModel
                 from ml.models.ttl_irrigation import TTLIrrigationModel
             except ImportError as e:
                 logger.error(f"[ML] Cannot import model classes: {e}")
@@ -219,13 +272,11 @@ class MLService:
             logger.error(f"[ML] pytorch_tabnet not installed: {e}")
             return
 
-        # 1. SwiFT Crop
-        self._swift_model   = self._load_torch(SwiFTCropModel,
-                                               "swift_crop_config.joblib",
-                                               "swift_crop_model.pth")
-        self._swift_encoder = self._load("swift_crop_encoder.joblib")
-        self._swift_scaler  = self._load("swift_crop_scaler.joblib")
-        self._swift_feats   = self._load("swift_crop_feature_names.joblib")
+        # 1. Crop Ensemble (RF + XGBoost + LightGBM)
+        self._crop_ensemble = self._load("crop_ensemble_model.joblib")
+        self._crop_encoder  = self._load("crop_encoder.joblib")
+        self._crop_scaler   = self._load("crop_scaler.joblib")
+        self._crop_feats    = self._load("crop_feature_names.joblib")
 
         # 2. TTL Irrigation
         self._ttl_model     = self._load_torch(TTLIrrigationModel,
@@ -262,11 +313,11 @@ class MLService:
         self._fert_background = self._load("fert_lime_background.joblib")
 
         loaded = sum(m is not None for m in [
-            self._swift_model, self._ttl_model,
-            self._soil_model,  self._fert_model,
+            self._crop_ensemble, self._ttl_model,
+            self._soil_model,    self._fert_model,
         ])
         self._models_loaded = loaded > 0
-        logger.info(f"[ML] {loaded}/4 Phase 8 models loaded.")
+        logger.info(f"[ML] {loaded}/4 models loaded.")
 
         if loaded == 0:
             logger.warning(
@@ -277,7 +328,7 @@ class MLService:
     def is_ready(self) -> bool:
         return self._models_loaded
 
-    # ── Crop Recommendation (SwiFT) ───────────────────────────
+    # ── Crop Recommendation (Ensemble) ────────────────────────
 
     def predict_crop(
         self,
@@ -289,8 +340,8 @@ class MLService:
         ph:          float,
         rainfall:    float,
     ) -> Optional[CropRecommendation]:
-        if self._swift_model is None:
-            logger.warning("[ML] SwiFT crop model not loaded.")
+        if self._crop_ensemble is None:
+            logger.warning("[ML] Crop ensemble model not loaded.")
             return None
         try:
             npk_total   = nitrogen + phosphorus + potassium
@@ -303,14 +354,12 @@ class MLService:
             feat = np.array([[nitrogen, phosphorus, potassium, temperature, humidity,
                               ph, rainfall, npk_total, n_to_p, n_to_k, p_to_k,
                               heat_index, water_score]], dtype=np.float32)
-            feat_sc = self._swift_scaler.transform(feat)
+            feat_sc = self._crop_scaler.transform(feat)
 
-            with torch.no_grad():
-                logits = self._swift_model(torch.tensor(feat_sc, dtype=torch.float32).to(DEVICE))
-                probas = torch.softmax(logits, dim=1)[0].cpu().numpy()
+            probas = self._crop_ensemble.predict_proba(feat_sc)[0]
 
             top_idx = np.argsort(probas)[::-1][:3]
-            top_3   = [(self._swift_encoder.classes_[i], round(float(probas[i]), 4))
+            top_3   = [(self._crop_encoder.classes_[i], round(float(probas[i]), 4))
                        for i in top_idx]
             best    = top_3[0][0]
 
@@ -347,16 +396,18 @@ class MLService:
             logger.warning("[ML] TTL irrigation model not loaded.")
             return None
         try:
-            try:
-                crop_enc = int(self._ttl_crop_enc.transform([crop_type])[0])
-            except (ValueError, AttributeError):
+            # Resolve the confirmed crop to a label the irrigation encoder knows
+            # (handles lowercase model output + crop→category fallback).
+            matched_crop, crop_enc = _normalise_crop(crop_type, self._ttl_crop_enc)
+            if crop_enc is None:
                 crop_enc = 0
+            kc_key = matched_crop or crop_type
             try:
                 stage_enc = int(self._ttl_stage_enc.transform([growth_stage])[0])
             except (ValueError, AttributeError):
                 stage_enc = 2  # mid_season default
 
-            Kc  = _CROP_KC.get(crop_type, 1.0) * _STAGE_MOD.get(growth_stage, 1.0)
+            Kc  = _CROP_KC.get(kc_key, 1.0) * _STAGE_MOD.get(growth_stage, 1.0)
             ET0 = max(0.5, 0.0023 * (temperature + 17.8) *
                       (abs(temperature - 18) ** 0.5 + 3) * 0.40)
             ETc = ET0 * Kc
@@ -390,6 +441,7 @@ class MLService:
                 water_amount_mm = IRRIGATION_WATER_MM[pred_class],
                 urgency         = IRRIGATION_URGENCY[pred_class],
                 crop_aware      = crop_aware,
+                crop_used       = crop_type if crop_aware else None,
                 input_features  = {
                     "soil_moisture_pct": soil_moisture,
                     "temperature_c":     temperature,
@@ -397,6 +449,7 @@ class MLService:
                     "ph_value":          ph,
                     "rainfall_mm":       rainfall_mm,
                     "crop_type":         crop_type,
+                    "matched_crop":      matched_crop,
                     "growth_stage":      growth_stage,
                     "ET0":               round(ET0, 3),
                     "ETc":               round(ETc, 3),
@@ -420,6 +473,7 @@ class MLService:
         potassium:   float,
         phosphorus:  float,
         explain:     bool = False,
+        crop_aware:  bool = False,
     ) -> Optional[FertilizerRecommendation]:
         if self._fert_model is None:
             logger.warning("[ML] TabNet fertilizer model not loaded.")
@@ -429,9 +483,10 @@ class MLService:
                 soil_enc = int(self._fert_soil_enc.transform([soil_type])[0])
             except (ValueError, AttributeError):
                 soil_enc = 0
-            try:
-                crop_enc = int(self._fert_crop_enc.transform([crop_type])[0])
-            except (ValueError, AttributeError):
+            # Resolve the confirmed crop to a label the fertilizer encoder knows
+            # (handles lowercase model output + crop→category fallback).
+            matched_crop, crop_enc = _normalise_crop(crop_type, self._fert_crop_enc)
+            if crop_enc is None:
                 crop_enc = 0
 
             feat = np.array([[temperature, humidity, moisture,
@@ -465,11 +520,13 @@ class MLService:
                 advice         = FERTILIZER_ADVICE.get(best_fert,
                                  f"Apply {best_fert} as recommended."),
                 npk_status     = npk_status,
+                crop_aware     = crop_aware,
+                crop_used      = crop_type if crop_aware else None,
                 input_features = {
                     "temperature": temperature, "humidity": humidity,
                     "moisture": moisture, "soil_type": soil_type,
-                    "crop_type": crop_type, "N": nitrogen,
-                    "K": potassium, "P": phosphorus,
+                    "crop_type": crop_type, "matched_crop": matched_crop,
+                    "N": nitrogen, "K": potassium, "P": phosphorus,
                 },
                 explanation = explanation,
             )
