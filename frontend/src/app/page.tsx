@@ -555,39 +555,50 @@ export default function Home() {
           </div>
 
           <div className="reveal-stagger grid lg:grid-cols-5 gap-8 items-stretch">
-            {/* Project story */}
+            {/* Project overview — SEO-rich, real content */}
             <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-200 p-7 md:p-8 hover:border-[#2E8B57]/40 hover:shadow-xl transition-all">
-              <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">Our Story</h3>
+              <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
+                About SmartAgri
+              </h3>
               <div className="space-y-3 text-sm md:text-base text-gray-600 leading-relaxed">
                 <p>
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
-                  incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
-                  exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                  <span className="font-semibold text-gray-800">SmartAgri</span> is an IoT-based
+                  Smart Agriculture monitoring and decision-support system, developed as the
+                  final-year <span className="font-semibold text-gray-800">Major Project</span> for
+                  the Bachelor of Computer Engineering programme at{" "}
+                  <span className="font-semibold text-gray-800">Far Western University (FWU)</span>,
+                  Mahendranagar, Nepal.
                 </p>
                 <p>
-                  Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu
-                  fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
-                  culpa qui officia deserunt mollit anim id est laborum.
+                  The system connects <span className="font-semibold text-gray-800">ESP32</span>{" "}
+                  field sensors to a cloud backend over the{" "}
+                  <span className="font-semibold text-gray-800">MQTT</span> protocol, collecting
+                  real-time soil moisture, temperature, humidity, pH, and NPK data. Machine-learning
+                  models then generate <span className="font-semibold text-gray-800">crop,
+                  fertilizer, irrigation and soil-fertility recommendations</span> tailored to
+                  Nepali farms.
                 </p>
                 <p>
-                  Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium
-                  doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore
-                  veritatis et quasi architecto beatae vitae dicta sunt explicabo.
+                  Built end-to-end by Computer Engineering students, SmartAgri applies coursework
+                  from Computer Networks, Cloud Computing, Embedded Systems, Digital Logic,
+                  Artificial Intelligence, and Database Systems into one working precision-agriculture
+                  platform with a live analytics dashboard and bilingual (English / Nepali) advisory
+                  reports.
                 </p>
               </div>
 
               <div className="mt-6 pt-5 border-t border-gray-100 grid grid-cols-3 gap-4">
                 <div>
                   <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">2025</div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Started</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Major Project</div>
                 </div>
                 <div>
-                  <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">9</div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Phases</div>
-                </div>
-                <div>
-                  <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">3</div>
+                  <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">4</div>
                   <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">ML Models</div>
+                </div>
+                <div>
+                  <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">FWU</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Far Western Univ.</div>
                 </div>
               </div>
             </div>
