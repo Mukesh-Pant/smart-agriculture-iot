@@ -16,11 +16,11 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://smartagri.cloudcoesis.com"),
   title: {
     default:
-      "SmartAgri — IoT Smart Agriculture | Major Project, Computer Engineering, Far Western University",
-    template: "%s | SmartAgri — FWU Computer Engineering",
+      "SmartAgri - IoT Smart Agriculture | Major Project, Computer Engineering, Far Western University",
+    template: "%s | SmartAgri - FWU Computer Engineering",
   },
   description:
-    "SmartAgri is an IoT-based Smart Agriculture monitoring and decision-support system — the final-year Major Project of Bachelor of Computer Engineering students at Far Western University (FWU), Mahendranagar, Nepal. It combines ESP32 sensors, MQTT, machine learning (crop, fertilizer, irrigation, soil), and real-time analytics.",
+    "SmartAgri is an IoT-based Smart Agriculture monitoring and decision-support system - the final-year Major Project of Bachelor of Computer Engineering students at Far Western University (FWU), Mahendranagar, Nepal. It combines ESP32 sensors, MQTT, machine learning (crop, fertilizer, irrigation, soil), and real-time analytics.",
   applicationName: "SmartAgri",
   authors: [
     { name: "Sapana Pandey" },
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     { name: "Adarsh Joshi" },
     { name: "Sagar Bist" },
   ],
-  creator: "Sapana Pandey, Mukesh Pant, Adarsh Joshi, Sagar Bist — Computer Engineering, Far Western University",
+  creator: "Sapana Pandey, Mukesh Pant, Adarsh Joshi, Sagar Bist - Computer Engineering, Far Western University",
   publisher: "Department of Computer Engineering, Far Western University",
   generator: "Next.js",
   keywords: [
@@ -76,24 +76,24 @@ export const metadata: Metadata = {
     url: "https://smartagri.cloudcoesis.com",
     siteName: "SmartAgri",
     title:
-      "SmartAgri — IoT Smart Agriculture | FWU Computer Engineering Major Project",
+      "SmartAgri - IoT Smart Agriculture | FWU Computer Engineering Major Project",
     description:
-      "Major Project by Sapana Pandey, Mukesh Pant, Adarsh Joshi & Sagar Bist — Computer Engineering, Far Western University, Nepal. Under the supervision of Er. Birendra Singh Dhami and Er. Kamal Lekhak. ESP32 + MQTT + ML for crop, fertilizer, irrigation & soil recommendations.",
+      "Major Project by Sapana Pandey, Mukesh Pant, Adarsh Joshi & Sagar Bist - Computer Engineering, Far Western University, Nepal. Under the supervision of Er. Birendra Singh Dhami and Er. Kamal Lekhak. ESP32 + MQTT + ML for crop, fertilizer, irrigation & soil recommendations.",
     locale: "en_US",
     images: [
       {
         url: "/landing/hero.jpg",
         width: 1200,
         height: 630,
-        alt: "SmartAgri — IoT Smart Agriculture monitoring dashboard",
+        alt: "SmartAgri - IoT Smart Agriculture monitoring dashboard",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "SmartAgri — IoT Smart Agriculture | FWU Computer Engineering",
+    title: "SmartAgri - IoT Smart Agriculture | FWU Computer Engineering",
     description:
-      "Major Project by Sapana Pandey, Mukesh Pant, Adarsh Joshi & Sagar Bist — Far Western University, Nepal. Supervised by Er. Birendra Singh Dhami & Er. Kamal Lekhak.",
+      "Major Project by Sapana Pandey, Mukesh Pant, Adarsh Joshi & Sagar Bist - Far Western University, Nepal. Supervised by Er. Birendra Singh Dhami & Er. Kamal Lekhak.",
     images: ["/landing/hero.jpg"],
   },
   robots: {
@@ -121,7 +121,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {/* Structured data — helps Google understand the project */}
+        {/* Structured data - helps Google understand the project */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -134,7 +134,7 @@ export default function RootLayout({
                   alternateName: "Smart Agriculture IoT",
                   url: "https://smartagri.cloudcoesis.com",
                   description:
-                    "IoT-based Smart Agriculture monitoring and decision-support system — Major Project of Computer Engineering students at Far Western University, Nepal.",
+                    "IoT-based Smart Agriculture monitoring and decision-support system - Major Project of Computer Engineering students at Far Western University, Nepal.",
                 },
                 {
                   "@type": "SoftwareApplication",
@@ -185,7 +185,7 @@ export default function RootLayout({
                 },
                 {
                   "@type": "CreativeWork",
-                  name: "SmartAgri — IoT Smart Agriculture Major Project",
+                  name: "SmartAgri - IoT Smart Agriculture Major Project",
                   about: [
                     "Smart Agriculture",
                     "Internet of Things",

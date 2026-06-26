@@ -140,7 +140,7 @@ export default function Home() {
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
           />
-          {/* Strong left-to-right dark gradient — text readable on left,
+          {/* Strong left-to-right dark gradient  text readable on left,
               image vivid on the right (matches reference style) */}
           <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/20" />
           {/* Soft top + bottom darkening for depth */}
@@ -219,7 +219,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* hero is now clean — feature pills moved to the Live Dashboard section */}
+          {/* hero is now clean  feature pills moved to the Live Dashboard section */}
         </div>
       </section>
 
@@ -245,7 +245,7 @@ export default function Home() {
           </div>
 
           <div className="grid lg:grid-cols-12 gap-10 items-center">
-            {/* Tilted dashboard mockup — left column */}
+            {/* Tilted dashboard mockup  left column */}
             <div
               className="reveal lg:col-span-9 relative"
               style={{ perspective: "1800px" }}
@@ -271,7 +271,7 @@ export default function Home() {
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/20 via-transparent to-transparent pointer-events-none" />
               </div>
 
-              {/* Floating live metric cards (kept — they belong on the dashboard preview) */}
+              {/* Floating live metric cards (kept  they belong on the dashboard preview) */}
               <div className="floating-card absolute -left-4 top-1/4 bg-white rounded-xl shadow-xl px-4 py-3 border border-gray-100 hidden lg:block">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-[#2E8B57] animate-pulse" />
@@ -297,7 +297,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right column — three 3D floating icon orbs (no cards) */}
+            {/* Right column  three 3D floating icon orbs (no cards) */}
             <div className="reveal-stagger lg:col-span-3 flex lg:flex-col gap-8 items-center justify-center">
               {[
                 {
@@ -555,7 +555,7 @@ export default function Home() {
           </div>
 
           <div className="reveal-stagger grid lg:grid-cols-5 gap-8 items-stretch">
-            {/* Project overview — SEO-rich, real content */}
+            {/* Project overview  SEO-rich, real content */}
             <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-200 p-7 md:p-8 hover:border-[#2E8B57]/40 hover:shadow-xl transition-all">
               <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
                 About SmartAgri
@@ -587,7 +587,7 @@ export default function Home() {
                 </p>
                 <p className="text-gray-700">
                   <span className="font-semibold text-gray-900">Developed by:</span>{" "}
-                  Sapana Pandey, Mukesh Pant, Adarsh Joshi and Sagar Bist —
+                  Sapana Pandey, Mukesh Pant, Adarsh Joshi and Sagar Bist 
                   under the supervision of{" "}
                   <span className="font-semibold text-gray-900">Er. Birendra Singh Dhami</span> and{" "}
                   <span className="font-semibold text-gray-900">Er. Kamal Lekhak</span>,
@@ -660,7 +660,7 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Supervisor cards — bigger gap between them, slightly wider container */}
+          {/* Supervisor cards  bigger gap between them, slightly wider container */}
           <div className="reveal-stagger grid sm:grid-cols-2 gap-10 max-w-4xl mx-auto w-full">
             {[
               {
@@ -711,7 +711,7 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Acknowledgments — compact under cards */}
+          {/* Acknowledgments  compact under cards */}
           <div className="reveal bg-[#2E8B57] rounded-xl p-5 text-white shadow-xl max-w-4xl mx-auto w-full">
             <div className="flex items-center gap-2 mb-2.5">
               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
