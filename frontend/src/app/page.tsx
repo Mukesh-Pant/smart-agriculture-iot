@@ -744,11 +744,9 @@ export default function Home() {
           <div className="container mx-auto max-w-6xl">
             <div className="flex flex-col md:flex-row items-center justify-between gap-2">
               <div className="flex items-center space-x-2">
-                <div className="w-7 h-7 bg-[#2E8B57] rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 9.3-2.66 15.4-8.2 17.04Z" />
-                    <path d="M2 21c0-3 1.85-5.36 5.08-6" />
-                  </svg>
+                <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/Logo.png" alt="SmartAgri logo" className="w-full h-full object-contain" />
                 </div>
                 <span className="text-sm font-semibold text-gray-900">SmartAgri IoT</span>
               </div>
