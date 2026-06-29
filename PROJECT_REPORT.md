@@ -329,7 +329,7 @@ This system demonstrates that an affordable, sensor-based agricultural monitorin
 | Figure 1: Overall System Block Diagram | 15 |
 | Figure 2: Crop-Aware Decision Flow Diagram | 22 |
 | Figure 3: Deployment Architecture Diagram | 23 |
-| Figure 4: Hardware Circuit Diagram | 25 |
+| Figure 4: Assembled Hardware Prototype | 25 |
 | Figure 5: Web Dashboard – Real-Time Sensor Display | 29 |
 | Figure 6: Web Dashboard – ML Advisor Input Form | 29 |
 | Figure 7: Web Dashboard – Multi-Range Analytics View | 30 |
@@ -776,10 +776,10 @@ The pH sensor module connects to GPIO 35 and includes a BNC connector for the pr
 
 The field deployment uses a 6V, 5W solar panel connected through a TP4056 charging module to an 18650 lithium-ion battery (3.7V, 2600 mAh). The TP4056 provides overcharge and over-discharge protection. A voltage regulator steps the output to 3.3V for the ESP32 and sensors. This configuration supports continuous operation in sunlit conditions and approximately 8–10 hours from battery alone.
 
-> **[FIGURE 4: Hardware Circuit Diagram]**
-> _Caption:_ Figure 4: Hardware Circuit Diagram
-> _Layout note:_ Circuit Diagram — ESP32 connections to DHT22, capacitive soil moisture sensor, PH-4502C, TP4056 charging module, and solar panel
-> _Diagram source:_ Wiring spec in `figures/figure-04-hardware-circuit-diagram.md` (Wokwi sensor interface + power-subsystem inset)
+> **[FIGURE 4: Assembled Hardware Prototype]**
+> _Caption:_ Figure 4: Assembled Hardware Prototype — ESP32 sensor node wired to the DHT22, capacitive soil-moisture sensor, and PH-4502C pH sensor
+> _Type:_ Real photograph of the built hardware
+> _Image source:_ `figures/figure-04-hardware-prototype.png` — see `figures/figure-04-hardware-circuit-diagram.md` for the photo checklist. The precise pin-level wiring is given in Figure 11 (Appendix C).
 
 ## 5.2 Firmware Implementation
 

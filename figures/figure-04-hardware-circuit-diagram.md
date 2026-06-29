@@ -1,40 +1,34 @@
-# Figure 4: Hardware Circuit Diagram
+# Figure 4: Assembled Hardware Prototype (real photo)
 
-**Report location:** Section 5.1.5 — Power Supply (Hardware Implementation)
-**Tool:** Wokwi for the sensor interface + a power-subsystem inset (Fritzing or hand-drawn)
-**Caption to use in report:** *Figure 4: Hardware Circuit Diagram*
+**Report location:** Section 5.1 — Hardware Implementation
+**Type:** Real photograph of your built sensor node (not a diagram)
+**Output file:** `figures/figure-04-hardware-prototype.png`
+**Caption to use in report:** *Figure 4: Assembled Hardware Prototype — ESP32 sensor node wired to the DHT22, capacitive soil-moisture sensor, and PH-4502C pH sensor*
 
-Figure 4 is the **full** hardware circuit: ESP32 + the three sensors **plus** the TP4056 charging module, 18650 battery, and solar panel. Wokwi can render the sensor-interface portion accurately but **cannot** represent the power subsystem (no TP4056 / 18650 / solar parts exist in Wokwi). So this figure is best assembled in two parts.
+## Why a photo here
+Figure 4 sits in Chapter 5 (Implementation) and now shows the **real assembled hardware**, which is more authentic and credible than any diagram or AI illustration. The precise, pin-level wiring is already covered by the Wokwi diagram in **Figure 11 (Appendix C)**, so Figure 4 focuses on showing that the physical system exists and is built.
 
-## Part A — Sensor interface (Wokwi)
-Use the exact same Wokwi project and `diagram.json` as **Figure 11** (see `figure-11-esp32-wiring-diagram.md`). The ESP32 + DHT22 + two analog stand-in potentiometers (soil moisture on GPIO 34, pH on GPIO 35) cover the entire sensor side of the circuit.
+## Photo checklist (for a clean, report-ready shot)
+1. **Lay it out flat** on a plain, uncluttered surface (white/neutral paper or a cutting mat works well). Avoid busy backgrounds.
+2. **Good even lighting** — daytime near a window or a desk lamp; avoid harsh shadows and direct flash glare.
+3. **Show all four key parts clearly:** the ESP32 board, the DHT22, the capacitive soil-moisture sensor, and the PH-4502C module (with its probe if possible).
+4. **Keep the jumper wires visible** so the connections read clearly; tidy them so they don't cross chaotically.
+5. **Shoot top-down or at a slight angle**, framed so the board and sensors fill most of the frame (not lost in empty space).
+6. **Hold steady** (rest elbows on the table or use any flat support) so it's sharp, not blurry.
+7. Take **2–3 shots** at slightly different angles so you can pick the cleanest.
 
-## Part B — Power subsystem (cannot be done in Wokwi)
-Draw this as a small inset/block (Fritzing has TP4056, 18650, and solar-panel parts; a clean block diagram also works). Exact wiring:
+## Optional: add callout labels (recommended)
+After shooting, add small text labels with arrows pointing to each component — "ESP32," "DHT22," "Capacitive Soil Moisture Sensor," "PH-4502C pH Sensor." Free tools for this:
+- **draw.io / diagrams.net** (insert the photo, drop text + arrows on top, export PNG)
+- **Canva** (free), **PowerPoint**, or **Paint 3D**
+- **Windows Snip & Sketch** for quick arrows
 
-```
-[6V 5W Solar Panel] + ──────► TP4056  IN+
-                    - ──────► TP4056  IN-
+Labels make the figure self-explanatory and look more professional.
 
-[TP4056]  B+ ──────► 18650 Li-ion (+)            (battery charge/protect)
-          B- ──────► 18650 Li-ion (-)
-          OUT+ ─────► 3.3 V regulator  VIN
-          OUT- ─────► common GND
+## Save & place
+- Export/save the final image as `figures/figure-04-hardware-prototype.png`.
+- Insert into Section 5.1 with the caption above.
 
-[3.3 V regulator] VOUT (3.3 V) ──► ESP32 3V3  and  sensor VCC rails
-                  GND          ──► ESP32 GND  (common ground with TP4056 OUT-)
-```
-
-Key facts (from the report):
-- Solar panel: 6 V, 5 W → TP4056 input.
-- TP4056: Li-ion charge controller with overcharge/over-discharge protection.
-- Battery: 18650, 3.7 V, 2600 mAh (≈ 8–10 h on battery alone).
-- A voltage regulator steps the TP4056 output to **3.3 V** for the ESP32 and sensors.
-- Note: the PH-4502C module is powered at **5 V** in the real build (onboard regulator → 0–3.3 V output); everything else runs at 3.3 V.
-
-## Assembly
-1. Generate the Wokwi sensor-interface screenshot (Part A).
-2. Add the power-subsystem block (Part B) either as a Fritzing drawing or a simple labelled block diagram beside/below the Wokwi capture.
-3. Combine into one figure (side-by-side or stacked) and use the caption above.
-
-> If you'd prefer a single fully-faithful image (all real component bodies + power), Fritzing is the better tool for Figure 4 — let me know and I'll write a Fritzing part/wiring spec instead.
+## Notes
+- This file keeps its original name (`figure-04-hardware-circuit-diagram.md`) only as the slot for Figure 4; the figure itself is now a hardware photo.
+- The power-subsystem wording in §5.1.5 (solar/TP4056/battery) is being left as-is for now per your decision — when you're ready, we'll reconcile that text with the real USB-powered build so it matches this photo.
