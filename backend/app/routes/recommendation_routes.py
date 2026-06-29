@@ -468,7 +468,10 @@ async def recommend_soil(request: SoilFertilityRequest):
     response_model=CompleteReportResponse,
     summary="Generate full 4-section report after farmer confirms crop (Step 2)"
 )
-async def generate_complete_report(request: CompleteReportRequest):
+async def generate_complete_report(
+    request: CompleteReportRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
     """
     Step 2 of the guided ML Advisor workflow.
 
@@ -480,6 +483,9 @@ async def generate_complete_report(request: CompleteReportRequest):
     All sensor/weather fields are optional — auto-filled from live data if absent.
     """
     _require_ml()
+    # Gate access + resolve the device this report belongs to (server-side,
+    # never trusting the request body). Farmers with no device get 403.
+    scoped_device = resolve_device_scope(user, request.device_id)
 
     from app.services.advice_service import (
         get_crop_advice, get_fertilizer_advice,
@@ -615,6 +621,8 @@ async def generate_complete_report(request: CompleteReportRequest):
 
     # ── 4. Save complete report to MongoDB ───────────────────────
     report_data = {
+        "user_id":          user.id,                 # server-derived (trusted)
+        "device_id":        scoped_device,
         "confirmed_crop":   confirmed_crop,
         "crop_confidence":  request.crop_confidence,
         "crop_top_3":       request.crop_top_3,
@@ -843,13 +851,24 @@ async def get_recommendation_history(
 
 
 @router.get("/history/{report_id}", summary="Get a single recommendation report by ID")
-async def get_recommendation_by_id(report_id: str):
-    """Returns one recommendation record by report_id (AGS-YYYYMMDD-XXXX format)."""
+async def get_recommendation_by_id(
+    report_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns one recommendation record by report_id (AGS-YYYYMMDD-XXXX format).
+    A farmer may only open their own reports; owners/admins may open any."""
     try:
         from app.database.repository import repository
         record = await repository.get_recommendation_by_report_id(report_id)
         if record is None:
             raise HTTPException(404, f"Report {report_id} not found")
+
+        # Ownership check: non-privileged users can only read their own reports.
+        if not user.is_privileged:
+            owner_id = record.get("user_id")
+            if owner_id and str(owner_id) != str(user.id):
+                raise HTTPException(403, "You do not have access to this report.")
+
         return record
     except HTTPException:
         raise
