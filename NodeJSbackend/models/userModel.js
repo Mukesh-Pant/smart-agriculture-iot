@@ -68,6 +68,18 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
+    // Password-reset token (random hex) + expiry. Cleared after use.
+    resetToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    resetTokenExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
     // ── RBAC + lifecycle ──────────────────────────────────────
     user_role: {
       type: String,

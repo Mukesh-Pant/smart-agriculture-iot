@@ -107,3 +107,47 @@ export async function sendApprovalEmail(to, firstName) {
     html,
   });
 }
+
+/**
+ * Send a password-reset link to a user who requested it.
+ */
+export async function sendPasswordResetEmail(to, token) {
+  const base = process.env.FRONTEND_URL || "http://localhost:3000";
+  const resetUrl = `${base}/reset-password?token=${encodeURIComponent(
+    token
+  )}&email=${encodeURIComponent(to)}`;
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <div style="width:40px;height:40px;background:#2E8B57;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px">SA</div>
+      <strong style="font-size:18px;color:#2E8B57">SmartAgri</strong>
+    </div>
+    <h2 style="font-size:20px;margin:0 0 12px">Reset your password</h2>
+    <p style="font-size:14px;line-height:1.6;color:#444">
+      We received a request to reset your SmartAgri password. Click the button
+      below to choose a new one. If you didn't request this, you can safely
+      ignore this email.
+    </p>
+    <p style="margin:24px 0">
+      <a href="${resetUrl}"
+         style="background:#2E8B57;color:#fff;text-decoration:none;padding:12px 28px;border-radius:9999px;font-weight:600;font-size:14px;display:inline-block">
+        Reset Password
+      </a>
+    </p>
+    <p style="font-size:12px;color:#888;line-height:1.6">
+      If the button doesn't work, paste this link into your browser:<br/>
+      <a href="${resetUrl}" style="color:#2E8B57;word-break:break-all">${resetUrl}</a>
+    </p>
+    <p style="font-size:12px;color:#aaa;margin-top:20px">
+      This link expires in 1 hour.
+    </p>
+  </div>`;
+
+  await getTransporter().sendMail({
+    from: `"SmartAgri" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: "Reset your SmartAgri password",
+    html,
+  });
+}

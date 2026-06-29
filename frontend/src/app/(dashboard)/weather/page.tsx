@@ -396,10 +396,10 @@ export default function WeatherPage() {
                   label: "Irrigation Need",
                   value:
                     w.rainfall_3h_mm > 5
-                      ? "Low — recent rainfall sufficient"
+                      ? "Low - recent rainfall sufficient"
                       : w.humidity_pct > 80
-                      ? "Moderate — high humidity"
-                      : "High — dry conditions",
+                      ? "Moderate - high humidity"
+                      : "High - dry conditions",
                   color: w.rainfall_3h_mm > 5 ? T.accent : w.humidity_pct > 80 ? T.amber : T.rose,
                   icon: Droplets,
                 },
@@ -407,16 +407,16 @@ export default function WeatherPage() {
                   label: "Crop Stress Risk",
                   value:
                     w.temperature_c > 35
-                      ? "Heat stress — monitor crops"
+                      ? "Heat stress - monitor crops"
                       : w.temperature_c < 10
-                      ? "Cold stress — protect from frost"
+                      ? "Cold stress - protect from frost"
                       : "Optimal temperature range",
                   color: w.temperature_c > 35 || w.temperature_c < 10 ? T.rose : T.accent,
                   icon: Thermometer,
                 },
                 {
                   label: "Disease Risk",
-                  value: w.humidity_pct > 85 ? "Elevated — fungal disease risk" : "Low — routine monitoring",
+                  value: w.humidity_pct > 85 ? "Elevated - fungal disease risk" : "Low - routine monitoring",
                   color: w.humidity_pct > 85 ? T.amber : T.accent,
                   icon: Bug,
                 },
@@ -465,7 +465,7 @@ export default function WeatherPage() {
                     </div>
                   </div>
                   <Badge 
-                    text={item.value.split(' — ')[0]} 
+                    text={item.value.split(' - ')[0]} 
                     color={item.color} 
                     size="sm"
                   />

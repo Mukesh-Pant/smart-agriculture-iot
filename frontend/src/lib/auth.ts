@@ -80,7 +80,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
 
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       // On sign-in, copy user fields into the token.
       if (user) {
         token.id = user.id;
@@ -90,6 +90,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.status = user.status;
         token.device_id = user.device_id ?? null;
         token.backendToken = user.backendToken;
+      }
+      // On client-side update() — e.g. after a profile edit in Settings —
+      // merge the new fields so the UI reflects them without a re-login.
+      if (trigger === "update" && session) {
+        if (session.firstName !== undefined) token.firstName = session.firstName;
+        if (session.lastName !== undefined) token.lastName = session.lastName;
       }
       return token;
     },

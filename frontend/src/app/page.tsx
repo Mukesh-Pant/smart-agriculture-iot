@@ -99,13 +99,13 @@ export default function Home() {
               className="flex items-center space-x-3 group"
               aria-label="SmartAgri home"
             >
-              <div className="w-11 h-11 bg-[#2E8B57] rounded-lg flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                {/* Leaf-with-circuit logo: organic leaf shape + tech node accent */}
-                <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 9.3-2.66 15.4-8.2 17.04Z" />
-                  <path d="M2 21c0-3 1.85-5.36 5.08-6" />
-                  <circle cx="14.5" cy="9.5" r="1.2" fill="currentColor" />
-                </svg>
+              <div className="w-11 h-11 rounded-lg overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/Logo.png"
+                  alt="SmartAgri logo"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
                 <div className={`text-xl font-extrabold tracking-tight ${scrolled ? "text-gray-900" : "text-white"}`}>SmartAgri</div>
@@ -378,7 +378,7 @@ export default function Home() {
               },
               {
                 title: "ML Crop Analysis",
-                desc: "SwiFT transformer predicts optimal crops with 77% accuracy across 18 Nepal-specific varieties",
+                desc: "An ensemble model (Random Forest + XGBoost + LightGBM) recommends optimal crops with 95% accuracy across 18 Nepal-specific varieties",
                 icon: (
                   <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -388,7 +388,7 @@ export default function Home() {
               },
               {
                 title: "Smart Irrigation",
-                desc: "TTL model recommends precise irrigation timing with 98.5% accuracy and crop-aware scheduling",
+                desc: "An FT-Transformer model recommends precise, crop-aware irrigation timing and water amount",
                 icon: (
                   <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
@@ -497,7 +497,7 @@ export default function Home() {
                 title: "ML Backend",
                 role: "Brains of the system",
                 desc: "FastAPI ingests sensor data, runs PyTorch models for crop, irrigation and fertilizer prediction, and stores everything in MongoDB Atlas.",
-                stack: ["FastAPI 0.115", "PyTorch 2.10", "TabNet · SwiFT · TTL", "Express + JWT", "MongoDB Atlas"],
+                stack: ["FastAPI 0.115", "PyTorch + scikit-learn", "Ensemble · TabNet · FT-Transformer", "Express + JWT", "MongoDB Atlas"],
               },
               {
                 num: "03",
@@ -623,7 +623,7 @@ export default function Home() {
                   { label: "Cloud Computing", note: "AWS · MongoDB Atlas" },
                   { label: "Embedded & Distributed", note: "ESP32 · MicroPython" },
                   { label: "Digital Logic", note: "Sensor interfacing · GPIO" },
-                  { label: "Artificial Intelligence", note: "PyTorch · SwiFT · TabNet" },
+                  { label: "Artificial Intelligence", note: "Ensemble · TabNet · FT-Transformer" },
                   { label: "IoT Systems", note: "End-to-end pipeline" },
                   { label: "Database Systems", note: "MongoDB · indexes · TTL" },
                   { label: "Software Engineering", note: "Docker · CI/CD" },
