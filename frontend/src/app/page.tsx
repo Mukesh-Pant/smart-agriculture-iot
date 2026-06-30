@@ -131,13 +131,15 @@ export default function Home() {
       </nav>
 
       {/* ───────────────────────── Hero ───────────────────────── */}
-      <section className="relative h-screen flex items-center px-4 lg:px-8 overflow-hidden">
+      <section className="relative h-[100svh] flex items-center px-4 lg:px-8 overflow-hidden bg-gray-900">
         {/* Full-bleed background image */}
         <div className="absolute inset-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/landing/hero6.jpg"
             alt=""
+            fetchPriority="high"
+            decoding="async"
             className="absolute inset-0 w-full h-full object-cover"
           />
           {/* Strong left-to-right dark gradient  text readable on left,
