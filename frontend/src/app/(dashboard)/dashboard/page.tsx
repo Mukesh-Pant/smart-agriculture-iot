@@ -857,7 +857,7 @@ export default function OverviewPage() {
                       color: uc[rec.irrigation.urgency] || T.teal,
                     }}
                   >
-                    {rec.irrigation.action?.replace(/_/g, " ")}
+                    {rec.irrigation.action?.replace(/_/g, " ").replace(/—|–/g, "-")}
                   </div>
                   {rec.irrigation.water_amount_mm && (
                     <div

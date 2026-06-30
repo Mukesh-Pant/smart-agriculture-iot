@@ -152,7 +152,7 @@ function DrawerContent({ rec, lang }: { rec: any; lang: Lang }) {
               <Badge text={urgency.toUpperCase()} color={c} size="sm" />
             </div>
             <div style={{ fontSize: 20, fontWeight: 700, color: c, marginBottom: 10, wordBreak: "break-word" }}>
-              {irrigation.action?.replace(/_/g, " ")}
+              {irrigation.action?.replace(/_/g, " ").replace(/—|–/g, "-")}
             </div>
             <ConfRow label={t("Confidence", "विश्वास")} value={irrigation.confidence} color={c} />
             {irrigation.water_amount_mm && (
@@ -470,7 +470,7 @@ function HistoryRow({ rec, lang, onOpen, fmtDate }: { rec: HistoryRecord; lang: 
   if (crop)       chips.push({ icon: Wheat,        color: "#2d6a2d", bg: "#e8f4e8", text: String(crop) });
   if (fertilizer) chips.push({ icon: FlaskConical, color: "#d97706", bg: "#fef3c7", text: String(fertilizer) });
   if (fertility)  chips.push({ icon: Layers,       color: "#7c3aed", bg: "#f3e8ff", text: String(fertility) });
-  if (irrigation) chips.push({ icon: Droplets,     color: "#0284c7", bg: "#dbeafe", text: String(irrigation).split("—")[0].trim() });
+  if (irrigation) chips.push({ icon: Droplets,     color: "#0284c7", bg: "#dbeafe", text: String(irrigation).split(/[—–-]/)[0].trim() });
 
   return (
     <div

@@ -196,8 +196,8 @@ export default function ManualInputPanel({ lang, onChange, seed, sensorKeys, sho
 
       <p style={{ fontSize: 11, color: T.textDim, margin: 0, lineHeight: 1.5 }}>
         {t(
-          "Crop is chosen from the Crop Recommendation results — selecting one personalises the fertilizer & irrigation advice.",
-          "बाली सिफारिस नतिजाबाट बाली छानिन्छ — एउटा छान्दा मलखाद र सिँचाई सल्लाह बाली-अनुसार हुन्छ।"
+          "Crop is chosen from the Crop Recommendation results - selecting one personalises the fertilizer & irrigation advice.",
+          "बाली सिफारिस नतिजाबाट बाली छानिन्छ - एउटा छान्दा मलखाद र सिँचाई सल्लाह बाली-अनुसार हुन्छ।"
         )}
       </p>
 

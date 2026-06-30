@@ -90,7 +90,7 @@ def _format_fertilizer(result) -> FertilizerRecommendationResponse:
 
 def _format_irrigation(result) -> IrrigationRecommendationResponse:
     return IrrigationRecommendationResponse(
-        action          = result.action,
+        action          = (result.action or "").replace("—", "-").replace("–", "-"),
         confidence      = result.confidence,
         confidence_pct  = f"{result.confidence * 100:.1f}%",
         advice          = result.advice,

@@ -196,8 +196,8 @@ export default function AIAdvisorPage() {
     setLiveSeedKey(k => k + 1);
     if (!gotSensor) {
       setLiveNotice(lang === "en"
-        ? "No live sensor data available — values below use defaults. Please review before submitting."
-        : "लाइभ सेन्सर डेटा उपलब्ध छैन — तलका मानहरू पूर्वनिर्धारित छन्। पेस गर्नु अघि जाँच गर्नुहोस्।");
+        ? "No live sensor data available - values below use defaults. Please review before submitting."
+        : "लाइभ सेन्सर डेटा उपलब्ध छैन - तलका मानहरू पूर्वनिर्धारित छन्। पेस गर्नु अघि जाँच गर्नुहोस्।");
     }
     setLiveLoading(false);
   };
@@ -583,8 +583,8 @@ export default function AIAdvisorPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
               <p style={{ fontSize: 12, color: T.textMuted, margin: 0, maxWidth: 620 }}>
                 {t(
-                  "Pre-filled from live sensor + weather. Values sensors can't measure (NPK, soil type) use defaults — review and adjust them, then get your recommendation.",
-                  "लाइभ सेन्सर र मौसमबाट भरिएको। सेन्सरले नाप्न नसक्ने मानहरू (NPK, माटोको प्रकार) पूर्वनिर्धारित छन् — जाँच गरी मिलाउनुहोस्, त्यसपछि सिफारिस लिनुहोस्।"
+                  "Pre-filled from live sensor + weather. Values sensors can't measure (NPK, soil type) use defaults - review and adjust them, then get your recommendation.",
+                  "लाइभ सेन्सर र मौसमबाट भरिएको। सेन्सरले नाप्न नसक्ने मानहरू (NPK, माटोको प्रकार) पूर्वनिर्धारित छन् - जाँच गरी मिलाउनुहोस्, त्यसपछि सिफारिस लिनुहोस्।"
                 )}
               </p>
               <button
@@ -645,7 +645,7 @@ export default function AIAdvisorPage() {
           {cropResult && (
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                {t("Select your crop — Top 3 matches", "आफ्नो बाली छान्नुहोस् — शीर्ष ३ मिलान")}
+                {t("Select your crop - Top 3 matches", "आफ्नो बाली छान्नुहोस् - शीर्ष ३ मिलान")}
               </div>
               {cropResult.top_3_crops?.map((c, i) => (
                 <TopM
@@ -750,7 +750,7 @@ export default function AIAdvisorPage() {
                   <Badge text={urgency.toUpperCase()} color={c} size="sm" />
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: c, marginBottom: 10, wordBreak: "break-word" }}>
-                  {irrigResult.action?.replace(/_/g, " ")}
+                  {irrigResult.action?.replace(/_/g, " ").replace(/—|–/g, "-")}
                 </div>
                 <ConfRow label={t("Confidence", "विश्वास")} value={irrigResult.confidence} color={c} />
                 {irrigResult.water_amount_mm && (
@@ -912,7 +912,7 @@ export default function AIAdvisorPage() {
                     <Badge text={urgency.toUpperCase()} color={c} size="sm" />
                   </div>
                   <div style={{ fontSize: 22, fontWeight: 700, color: c, marginBottom: 12, wordBreak: "break-word" }}>
-                    {report.irrigation.action?.replace(/_/g, " ")}
+                    {report.irrigation.action?.replace(/_/g, " ").replace(/—|–/g, "-")}
                   </div>
                   <ConfRow label={t("Model confidence", "मोडल विश्वास")} value={report.irrigation.confidence} color={c} />
                   {report.irrigation.water_amount_mm && (
