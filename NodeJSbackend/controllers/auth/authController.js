@@ -2,9 +2,10 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import UserModel from "../../models/userModel.js";
-import { sendVerificationEmail } from "../../utils/mailer.js";
+import { sendVerificationEmail, sendPasswordResetEmail } from "../../utils/mailer.js";
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const RESET_TTL_MS = 60 * 60 * 1000; // 1h
 const BCRYPT_ROUNDS = 12;
 
 /** Owner bootstrap: emails in OWNER_EMAIL (comma-separated) are auto-approved as "owner". */
@@ -277,7 +278,7 @@ export async function login(req, res) {
     };
 
     const token = jwt.sign(tokenData, process.env.TOKEN_SECRET_KEY, {
-      expiresIn: "1d",
+      expiresIn: "30d",
     });
 
     return res.json({
@@ -305,6 +306,139 @@ export async function login(req, res) {
       success: false,
       error: true,
       message: "Something went wrong during login.",
+    });
+  }
+}
+
+/**
+ * POST /api/account/forgot-password
+ * Body: { email }
+ * Generates a reset token and emails a reset link. Always returns a generic
+ * success message (never reveals whether the email exists).
+ */
+export async function forgotPassword(req, res) {
+  try {
+    const { email } = req.body || {};
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: true,
+        message: "Email is required.",
+      });
+    }
+
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const user = await UserModel.findOne({ email: normalizedEmail });
+
+    // Only send if the account exists AND has verified its email. Either way,
+    // respond identically to avoid leaking which emails are registered.
+    if (user && user.emailVerified) {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      user.resetToken = rawToken;
+      user.resetTokenExpires = new Date(Date.now() + RESET_TTL_MS);
+      await user.save();
+
+      try {
+        await sendPasswordResetEmail(normalizedEmail, rawToken);
+      } catch (mailErr) {
+        console.error("Reset email failed:", mailErr.message);
+        // Roll back the token so a half-issued reset can be retried cleanly.
+        user.resetToken = null;
+        user.resetTokenExpires = null;
+        await user.save();
+        return res.status(502).json({
+          success: false,
+          error: true,
+          message: "Could not send the reset email. Please try again later.",
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      error: false,
+      message:
+        "If an account with that email exists, a password reset link has been sent.",
+    });
+  } catch (err) {
+    console.error("forgotPassword error:", err);
+    return res.status(500).json({
+      success: false,
+      error: true,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+}
+
+/**
+ * POST /api/account/reset-password
+ * Body: { email, token, password }
+ * Verifies the reset token and sets a new password.
+ */
+export async function resetPassword(req, res) {
+  try {
+    const { email, token, password } = req.body || {};
+    if (!email || !token || !password) {
+      return res.status(400).json({
+        success: false,
+        error: true,
+        message: "Email, token, and new password are required.",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: true,
+        message: "Password must be at least 8 characters.",
+      });
+    }
+
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const user = await UserModel.findOne({ email: normalizedEmail }).select(
+      "+resetToken +resetTokenExpires"
+    );
+
+    if (!user || !user.resetToken) {
+      return res.status(400).json({
+        success: false,
+        error: true,
+        message: "Invalid or already-used reset link.",
+      });
+    }
+
+    if (user.resetToken !== token) {
+      return res.status(400).json({
+        success: false,
+        error: true,
+        message: "Invalid reset token.",
+      });
+    }
+
+    if (user.resetTokenExpires && user.resetTokenExpires.getTime() < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        error: true,
+        message: "Reset link has expired. Please request a new one.",
+      });
+    }
+
+    user.password = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    user.resetToken = null;
+    user.resetTokenExpires = null;
+    await user.save();
+
+    return res.json({
+      success: true,
+      error: false,
+      message: "Password updated. You can now sign in with your new password.",
+    });
+  } catch (err) {
+    console.error("resetPassword error:", err);
+    return res.status(500).json({
+      success: false,
+      error: true,
+      message: "Something went wrong. Please try again.",
     });
   }
 }

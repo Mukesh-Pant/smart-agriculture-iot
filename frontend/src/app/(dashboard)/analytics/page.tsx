@@ -73,7 +73,7 @@ function getGreeting() {
 export default function AnalyticsPage() {
   const [range, setRange] = useState<string>("7d");
 
-  const { data, loading } = useFetch(
+  const { data, loading, error } = useFetch(
     useCallback(() => getTrends(range), [range])
   ) as { data: TrendResponse | null; loading: boolean; error: any };
 
@@ -81,6 +81,40 @@ export default function AnalyticsPage() {
   const summary = data?.summary;
   const granularity = data?.granularity ?? "daily";
   const rangeLabel = RANGES.find(r => r.key === range)?.label ?? range;
+
+  // Access gate: if the backend denied access (no device assigned, etc),
+  // show a clear message instead of an empty/zeroed-out analytics UI.
+  const noAccess =
+    !loading &&
+    typeof error === "string" &&
+    (error.toLowerCase().includes("device") ||
+      error.toLowerCase().includes("access") ||
+      error.toLowerCase().includes("login") ||
+      error.toLowerCase().includes("auth"));
+
+  if (noAccess) {
+    return (
+      <div style={{ backgroundColor: T.bg, minHeight: "100vh", padding: "24px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ maxWidth: 460, textAlign: "center", background: T.surface, border: `1px dashed ${T.border}`, borderRadius: 20, padding: "40px 32px" }}>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: `${T.amber}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <BarChart3 size={26} color={T.amber} />
+            </div>
+          </div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: T.text, marginBottom: 8 }}>
+            No device assigned
+          </h2>
+          <p style={{ fontSize: 14, color: T.textMuted, lineHeight: 1.6 }}>
+            {error}
+          </p>
+          <p style={{ fontSize: 13, color: T.textMuted, marginTop: 12 }}>
+            Analytics become available once an administrator assigns a sensor
+            device to your account.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const metricCards = METRICS.map(m => ({
     ...m,

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import { BACKEND_DOMAIN } from "@/lib/backend";
 
 const BACKEND = BACKEND_DOMAIN;
@@ -32,6 +32,7 @@ function friendlyError(raw: string): string {
     case "SUSPENDED":
       return "Your account has been suspended. Please contact an administrator.";
     case "CredentialsSignin":
+    case "Configuration":
       return "Invalid email or password.";
     default:
       return raw || "Something went wrong. Please try again.";
@@ -44,6 +45,7 @@ export default function AuthCard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -63,6 +65,24 @@ export default function AuthCard() {
     setNotice(null);
     setLoading(true);
     try {
+      // Pre-flight: ask the backend directly so we can show the EXACT reason
+      // (wrong password, not verified, pending approval, etc). NextAuth's
+      // signIn() only returns a generic error code, which is why a wrong
+      // password used to surface as "Configuration".
+      const pre = await fetch(`${BACKEND}/api/account/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: form.email, password: form.password }),
+      });
+      const preData = await pre.json().catch(() => null);
+
+      if (!pre.ok || !preData?.success) {
+        setError(friendlyError(preData?.code || preData?.message || ""));
+        return;
+      }
+
+      // Credentials are valid — establish the NextAuth session.
       const res = await signIn("credentials", {
         email: form.email,
         password: form.password,
@@ -73,11 +93,9 @@ export default function AuthCard() {
         setError(friendlyError(res.error));
         return;
       }
-      // Success — go through the session-bootstrap route. Use replace so the
-      // login page isn't left in history (prevents back-button loops).
       router.replace("/jwtSetup");
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("Could not reach the server. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -226,18 +244,40 @@ export default function AuthCard() {
           </div>
 
           <div className="grid gap-2">
-            <Label>Password</Label>
-            <Input
-              required
-              type="password"
-              name="password"
-              autoComplete={
-                mode === "signin" ? "current-password" : "new-password"
-              }
-              value={form.password}
-              onChange={update("password")}
-              placeholder={mode === "register" ? "At least 8 characters" : "••••••••"}
-            />
+            <div className="flex items-center justify-between">
+              <Label>Password</Label>
+              {mode === "signin" && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/forgot-password")}
+                  className="text-xs font-medium text-[#2E8B57] hover:underline"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <Input
+                required
+                type={showPassword ? "text" : "password"}
+                name="password"
+                autoComplete={
+                  mode === "signin" ? "current-password" : "new-password"
+                }
+                value={form.password}
+                onChange={update("password")}
+                placeholder={mode === "register" ? "At least 8 characters" : "Enter your password"}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
           </div>
 
           <Button

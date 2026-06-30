@@ -15,6 +15,9 @@ async function request(path, options = {}) {
     // Send the httpOnly backend_token cookie so FastAPI can enforce
     // per-device access (same-origin in production via nginx).
     credentials: "include",
+    // Never serve a cached response — prevents one user briefly seeing
+    // another user's (or a no-device user seeing stale) data.
+    cache: "no-store",
     headers: { "Content-Type": "application/json" },
     ...options,
   });

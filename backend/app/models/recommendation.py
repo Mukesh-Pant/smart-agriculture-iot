@@ -221,6 +221,10 @@ class CompleteReportRequest(BaseModel):
     rainfall:         Optional[float] = Field(None, ge=0,   le=500)
     soil_moisture:    Optional[float] = Field(None, ge=0,   le=100)
     soil_type:        Optional[str]   = "Loamy"
+    # Device this report belongs to. Optional in the body — the server
+    # resolves/authorizes it via resolve_device_scope() and never trusts it
+    # blindly. Must exist on the model or `request.device_id` raises 500.
+    device_id:        Optional[str]   = None
 
 
 class SectionAdvice(BaseModel):

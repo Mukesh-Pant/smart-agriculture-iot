@@ -2,6 +2,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import DashboardSidebar from "./_components/DashboardSidebar";
 import UserProfileDropdownPage from "./_components/UserProfileDropDown";
 import DashboardHeaderPage from "./_components/DashboardHeader";
+import SessionRefresher from "./_components/SessionRefresher";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { safeAuth } from "@/lib/safeAuth";
@@ -24,6 +25,7 @@ export default async function DashboardLayout({
 
   return (
     <SidebarProvider className=" bg-[#e4e7eb] lg:pl-2.5 lg:pr-2.5">
+      <SessionRefresher />
       <DashboardSidebar>
         <UserProfileDropdownPage isArrowUp isFullName />
       </DashboardSidebar>

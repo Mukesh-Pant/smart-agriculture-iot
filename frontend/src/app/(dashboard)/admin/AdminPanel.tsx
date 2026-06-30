@@ -89,7 +89,7 @@ export default function AdminPanel({
 
       const res = await fetch(
         `${BACKEND}/api/admin/users?${qs.toString()}`,
-        { headers: authHeaders, credentials: "include" }
+        { headers: authHeaders, credentials: "include", cache: "no-store" }
       );
       const data = await res.json();
       if (res.ok && data.success) {

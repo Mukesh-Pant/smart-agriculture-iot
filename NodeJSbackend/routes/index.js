@@ -4,7 +4,7 @@ import userOnboarding from "../controllers/user/onboarding.js";
 import { getMe } from "../controllers/user/me.js";
 import SettingCookies from "../controllers/setcookies.js";
 
-import { register, verifyEmail, login } from "../controllers/auth/authController.js";
+import { register, verifyEmail, login, forgotPassword, resetPassword } from "../controllers/auth/authController.js";
 import {
   listUsers,
   approveUser,
@@ -25,6 +25,8 @@ const route = express.Router();
 route.post("/account/register", register);
 route.get("/account/verify", verifyEmail);
 route.post("/account/login", login);
+route.post("/account/forgot-password", forgotPassword);
+route.post("/account/reset-password", resetPassword);
 
 /* ── Session cookie relay (token in Authorization header) ──── */
 route.get("/settingCookies", SettingCookies);

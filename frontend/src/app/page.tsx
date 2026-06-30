@@ -99,13 +99,13 @@ export default function Home() {
               className="flex items-center space-x-3 group"
               aria-label="SmartAgri home"
             >
-              <div className="w-11 h-11 bg-[#2E8B57] rounded-lg flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                {/* Leaf-with-circuit logo: organic leaf shape + tech node accent */}
-                <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 9.3-2.66 15.4-8.2 17.04Z" />
-                  <path d="M2 21c0-3 1.85-5.36 5.08-6" />
-                  <circle cx="14.5" cy="9.5" r="1.2" fill="currentColor" />
-                </svg>
+              <div className="w-11 h-11 rounded-lg overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/Logo.png"
+                  alt="SmartAgri logo"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
                 <div className={`text-xl font-extrabold tracking-tight ${scrolled ? "text-gray-900" : "text-white"}`}>SmartAgri</div>
@@ -131,16 +131,18 @@ export default function Home() {
       </nav>
 
       {/* ───────────────────────── Hero ───────────────────────── */}
-      <section className="relative h-screen flex items-center px-4 lg:px-8 overflow-hidden">
+      <section className="relative h-[100svh] flex items-center px-4 lg:px-8 overflow-hidden bg-gray-900">
         {/* Full-bleed background image */}
         <div className="absolute inset-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/landing/hero6.jpg"
             alt=""
+            fetchPriority="high"
+            decoding="async"
             className="absolute inset-0 w-full h-full object-cover"
           />
-          {/* Strong left-to-right dark gradient — text readable on left,
+          {/* Strong left-to-right dark gradient  text readable on left,
               image vivid on the right (matches reference style) */}
           <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/20" />
           {/* Soft top + bottom darkening for depth */}
@@ -219,7 +221,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* hero is now clean — feature pills moved to the Live Dashboard section */}
+          {/* hero is now clean  feature pills moved to the Live Dashboard section */}
         </div>
       </section>
 
@@ -245,7 +247,7 @@ export default function Home() {
           </div>
 
           <div className="grid lg:grid-cols-12 gap-10 items-center">
-            {/* Tilted dashboard mockup — left column */}
+            {/* Tilted dashboard mockup  left column */}
             <div
               className="reveal lg:col-span-9 relative"
               style={{ perspective: "1800px" }}
@@ -271,7 +273,7 @@ export default function Home() {
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/20 via-transparent to-transparent pointer-events-none" />
               </div>
 
-              {/* Floating live metric cards (kept — they belong on the dashboard preview) */}
+              {/* Floating live metric cards (kept  they belong on the dashboard preview) */}
               <div className="floating-card absolute -left-4 top-1/4 bg-white rounded-xl shadow-xl px-4 py-3 border border-gray-100 hidden lg:block">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-[#2E8B57] animate-pulse" />
@@ -297,7 +299,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right column — three 3D floating icon orbs (no cards) */}
+            {/* Right column  three 3D floating icon orbs (no cards) */}
             <div className="reveal-stagger lg:col-span-3 flex lg:flex-col gap-8 items-center justify-center">
               {[
                 {
@@ -378,7 +380,7 @@ export default function Home() {
               },
               {
                 title: "ML Crop Analysis",
-                desc: "SwiFT transformer predicts optimal crops with 77% accuracy across 18 Nepal-specific varieties",
+                desc: "An ensemble model (Random Forest + XGBoost + LightGBM) recommends optimal crops with 95% accuracy across 18 Nepal-specific varieties",
                 icon: (
                   <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -388,7 +390,7 @@ export default function Home() {
               },
               {
                 title: "Smart Irrigation",
-                desc: "TTL model recommends precise irrigation timing with 98.5% accuracy and crop-aware scheduling",
+                desc: "An FT-Transformer model recommends precise, crop-aware irrigation timing and water amount",
                 icon: (
                   <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
@@ -497,7 +499,7 @@ export default function Home() {
                 title: "ML Backend",
                 role: "Brains of the system",
                 desc: "FastAPI ingests sensor data, runs PyTorch models for crop, irrigation and fertilizer prediction, and stores everything in MongoDB Atlas.",
-                stack: ["FastAPI 0.115", "PyTorch 2.10", "TabNet · SwiFT · TTL", "Express + JWT", "MongoDB Atlas"],
+                stack: ["FastAPI 0.115", "PyTorch + scikit-learn", "Ensemble · TabNet · FT-Transformer", "Express + JWT", "MongoDB Atlas"],
               },
               {
                 num: "03",
@@ -555,39 +557,58 @@ export default function Home() {
           </div>
 
           <div className="reveal-stagger grid lg:grid-cols-5 gap-8 items-stretch">
-            {/* Project story */}
+            {/* Project overview  SEO-rich, real content */}
             <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-200 p-7 md:p-8 hover:border-[#2E8B57]/40 hover:shadow-xl transition-all">
-              <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">Our Story</h3>
+              <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
+                About SmartAgri
+              </h3>
               <div className="space-y-3 text-sm md:text-base text-gray-600 leading-relaxed">
                 <p>
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
-                  incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
-                  exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                  <span className="font-semibold text-gray-800">SmartAgri</span> is an IoT-based
+                  Smart Agriculture monitoring and decision-support system, developed as the
+                  final-year <span className="font-semibold text-gray-800">Major Project</span> for
+                  the Bachelor of Computer Engineering programme at{" "}
+                  <span className="font-semibold text-gray-800">Far Western University (FWU)</span>,
+                  Mahendranagar, Nepal.
                 </p>
                 <p>
-                  Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu
-                  fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
-                  culpa qui officia deserunt mollit anim id est laborum.
+                  The system connects <span className="font-semibold text-gray-800">ESP32</span>{" "}
+                  field sensors to a cloud backend over the{" "}
+                  <span className="font-semibold text-gray-800">MQTT</span> protocol, collecting
+                  real-time soil moisture, temperature, humidity, pH, and NPK data. Machine-learning
+                  models then generate <span className="font-semibold text-gray-800">crop,
+                  fertilizer, irrigation and soil-fertility recommendations</span> tailored to
+                  Nepali farms.
                 </p>
                 <p>
-                  Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium
-                  doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore
-                  veritatis et quasi architecto beatae vitae dicta sunt explicabo.
+                  Built end-to-end by Computer Engineering students, SmartAgri applies coursework
+                  from Computer Networks, Cloud Computing, Embedded Systems, Digital Logic,
+                  Artificial Intelligence, and Database Systems into one working precision-agriculture
+                  platform with a live analytics dashboard and bilingual (English / Nepali) advisory
+                  reports.
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-semibold text-gray-900">Developed by:</span>{" "}
+                  Sapana Pandey, Mukesh Pant, Adarsh Joshi and Sagar Bist 
+                  under the supervision of{" "}
+                  <span className="font-semibold text-gray-900">Er. Birendra Singh Dhami</span> and{" "}
+                  <span className="font-semibold text-gray-900">Er. Kamal Lekhak</span>,
+                  Department of Computer Engineering, Far Western University.
                 </p>
               </div>
 
               <div className="mt-6 pt-5 border-t border-gray-100 grid grid-cols-3 gap-4">
                 <div>
                   <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">2025</div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Started</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Major Project</div>
                 </div>
                 <div>
-                  <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">9</div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Phases</div>
-                </div>
-                <div>
-                  <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">3</div>
+                  <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">4</div>
                   <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">ML Models</div>
+                </div>
+                <div>
+                  <div className="text-2xl md:text-3xl font-bold text-[#2E8B57]">FWU</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Far Western Univ.</div>
                 </div>
               </div>
             </div>
@@ -604,7 +625,7 @@ export default function Home() {
                   { label: "Cloud Computing", note: "AWS · MongoDB Atlas" },
                   { label: "Embedded & Distributed", note: "ESP32 · MicroPython" },
                   { label: "Digital Logic", note: "Sensor interfacing · GPIO" },
-                  { label: "Artificial Intelligence", note: "PyTorch · SwiFT · TabNet" },
+                  { label: "Artificial Intelligence", note: "Ensemble · TabNet · FT-Transformer" },
                   { label: "IoT Systems", note: "End-to-end pipeline" },
                   { label: "Database Systems", note: "MongoDB · indexes · TTL" },
                   { label: "Software Engineering", note: "Docker · CI/CD" },
@@ -641,7 +662,7 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Supervisor cards — bigger gap between them, slightly wider container */}
+          {/* Supervisor cards  bigger gap between them, slightly wider container */}
           <div className="reveal-stagger grid sm:grid-cols-2 gap-10 max-w-4xl mx-auto w-full">
             {[
               {
@@ -692,7 +713,7 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Acknowledgments — compact under cards */}
+          {/* Acknowledgments  compact under cards */}
           <div className="reveal bg-[#2E8B57] rounded-xl p-5 text-white shadow-xl max-w-4xl mx-auto w-full">
             <div className="flex items-center gap-2 mb-2.5">
               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -725,11 +746,9 @@ export default function Home() {
           <div className="container mx-auto max-w-6xl">
             <div className="flex flex-col md:flex-row items-center justify-between gap-2">
               <div className="flex items-center space-x-2">
-                <div className="w-7 h-7 bg-[#2E8B57] rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 9.3-2.66 15.4-8.2 17.04Z" />
-                    <path d="M2 21c0-3 1.85-5.36 5.08-6" />
-                  </svg>
+                <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/Logo.png" alt="SmartAgri logo" className="w-full h-full object-contain" />
                 </div>
                 <span className="text-sm font-semibold text-gray-900">SmartAgri IoT</span>
               </div>

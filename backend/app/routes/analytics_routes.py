@@ -183,6 +183,7 @@ async def get_weekly_summary(
 async def get_trends(
     range:     str           = Query("7d", description="One of: 48h, 7d, 15d, 1m, 3m, 6m"),
     device_id: Optional[str] = Query(default=None),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Returns avg/min/max trends bucketed at an appropriate granularity for the
@@ -190,6 +191,8 @@ async def get_trends(
     plus an overall summary for the range. Operates on whatever data exists.
     """
     _require_db()
+    # Enforce per-device access: a farmer with no assigned device gets 403.
+    device_id = resolve_device_scope(user, device_id)
 
     # range key -> (lookback window, $dateTrunc unit, human bucket label)
     RANGES = {
