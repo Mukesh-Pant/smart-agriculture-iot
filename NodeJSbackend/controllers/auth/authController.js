@@ -278,7 +278,7 @@ export async function login(req, res) {
     };
 
     const token = jwt.sign(tokenData, process.env.TOKEN_SECRET_KEY, {
-      expiresIn: "1d",
+      expiresIn: "30d",
     });
 
     return res.json({

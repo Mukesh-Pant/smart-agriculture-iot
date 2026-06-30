@@ -62,7 +62,7 @@ async function SettingCookies(req, res) {
         devices: Array.isArray(user.devices) ? user.devices : [],
       },
       process.env.TOKEN_SECRET_KEY,
-      { expiresIn: "1d" }
+      { expiresIn: "30d" }
     );
 
     // Behind nginx everything is same-origin over HTTPS, so a Lax,
@@ -73,7 +73,7 @@ async function SettingCookies(req, res) {
       httpOnly: true,
       secure: isProd,
       sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     };
 
     return res.cookie("backend_token", token, cookieOptions).json({

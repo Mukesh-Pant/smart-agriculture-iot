@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +40,7 @@ export default function SettingsClient({
   const [district, setDistrict] = useState("");
   const [saving, setSaving] = useState(false);
   const { update } = useSession();
+  const router = useRouter();
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -59,6 +61,9 @@ export default function SettingsClient({
         // Refresh the NextAuth session so the new name shows everywhere
         // (header, dropdown) without requiring a re-login.
         await update({ firstName, lastName });
+        // The header dropdown is a server component, so re-render server
+        // components to pick up the refreshed session cookie immediately.
+        router.refresh();
         toast.success("Profile updated.");
       } else {
         toast.error(data.message || "Could not update profile.");

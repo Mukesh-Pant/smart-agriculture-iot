@@ -32,7 +32,10 @@ declare module "next-auth" {
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   // Credentials provider requires JWT session strategy (no DB adapter).
-  session: { strategy: "jwt" },
+  // 30-day lifetime, matched to the NodeJS backend token TTL so the session
+  // and the backend_token never expire out of sync (which used to surface as
+  // a live session that could no longer reach the API — e.g. admin "0 users").
+  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
 
   providers: [
     Credentials({
@@ -96,6 +99,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (trigger === "update" && session) {
         if (session.firstName !== undefined) token.firstName = session.firstName;
         if (session.lastName !== undefined) token.lastName = session.lastName;
+        // Keep the display `name` in sync too — the header/dropdown render
+        // from it, so without this the name would stay stale until re-login.
+        const fn = (token.firstName as string | null) ?? "";
+        const ln = (token.lastName as string | null) ?? "";
+        const full = `${fn} ${ln}`.trim();
+        if (full) token.name = full;
       }
       return token;
     },
