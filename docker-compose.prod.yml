@@ -42,7 +42,10 @@ services:
       nodejs:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost/nginx-health 2>/dev/null | grep -q ok || exit 1"]
+      # Use 127.0.0.1 (not "localhost"): inside the Alpine container localhost
+      # resolves to IPv6 ::1 first, but nginx `listen 80` binds IPv4 only, so a
+      # localhost probe gets "connection refused" and falsely reports unhealthy.
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/nginx-health 2>/dev/null | grep -q ok || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
