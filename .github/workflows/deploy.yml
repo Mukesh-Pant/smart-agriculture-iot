@@ -99,6 +99,7 @@ jobs:
 
           # Execute deployment script on EC2
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
+            set -e
             cd /home/ubuntu/app
 
             # Move .env files to correct locations
@@ -120,20 +121,20 @@ jobs:
             ls -lh backend/ml/saved_models/ || echo "No ML models deployed yet (train locally and include in next deployment)"
 
             # Stop existing containers
-            docker compose -f docker compose.yml -f docker compose.prod.yml down || true
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml down || true
 
             # Build and start containers
-            docker compose -f docker compose.yml -f docker compose.prod.yml up --build -d
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 
             # Wait for services to start
             echo "Waiting for services to initialize..."
             sleep 30
 
             # Show container status
-            docker compose ps
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 
             # Check logs for errors
-            docker compose logs --tail=50
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50
           EOF
 
       - name: Verify deployment
