@@ -66,26 +66,26 @@ The entire system is **containerized with Docker** and **continuously deployed t
 │                ↓ WiFi · MQTT publish (auth, port 1883)                 │
 └──────────────────────────────────────────────────────────────────────┘
                                   ↓
-┌──────────────────────────────────────────────────────────────────────┐
-│        AWS EC2 (Elastic IP 13.235.169.146) · Docker Compose            │
-│                                                                        │
-│   [nginx :80/:443 — TLS, reverse proxy]                                │
+┌───────────────────────────────────────────────────────────────────────┐
+│        AWS EC2 (Elastic IP 13.235.169.146) · Docker Compose             │
+│                                                                         │
+│   [nginx :80/:443 — TLS, reverse proxy]                                 │
 │        ├── /            → [Next.js 16  :3000]   dashboard / SSR / auth  │
 │        ├── /api/account → [Express 5   :5000]   onboarding · JWT        │
 │        └── /api/*, /health → [FastAPI  :8000]   sensors · ML · advice   │
-│                                                                        │
-│   [Eclipse Mosquitto :1883] ──auth──► [FastAPI MQTT subscriber]        │
-│                                              ↓                         │
-│   [Phase 8–9 ML Engine: SwiFT · TTL · TabNet×2 · LIME XAI]             │
-│   [Gemini 2.5 Flash bilingual advice]  [WeasyPrint PDF reports]        │
-└──────────────────────────────────────────────────────────────────────┘
+│                                                                         │
+│   [Eclipse Mosquitto :1883] ──auth──► [FastAPI MQTT subscriber]         │
+│                                              ↓                          │
+│   [Phase 8–9 ML Engine: SwiFT · TTL · TabNet×2 · LIME XAI]              │
+│   [Gemini 2.5 Flash bilingual advice]  [WeasyPrint PDF reports]         │
+└───────────────────────────────────────────────────────────────────────┘
             ↓ Motor (async)                         ↑ OpenWeatherMap API
-   ┌─────────────────────┐                  ┌────────────────────┐
-   │   MongoDB Atlas      │                  │  GitHub Actions     │
-   │  sensor_readings,    │                  │  push → test →      │
-   │  recommendations,    │                  │  build → deploy     │
+   ┌─────────────────────┐                   ┌─────────────────────┐
+   │   MongoDB Atlas      │                  │  GitHub Actions      │
+   │  sensor_readings,    │                  │  push → test →       │ 
+   │  recommendations,    │                  │  build → deploy      │
    │  devices, alerts,    │                  │  → EC2 (rsync+Docker)│
-   │  users, sessions     │                  └────────────────────┘
+   │  users, sessions     │                  └─────────────────────┘
    └─────────────────────┘
 ```
 
